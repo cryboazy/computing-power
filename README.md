@@ -25,11 +25,11 @@ computing-power/
 │   ├── package.json        # Node 依赖
 │   ├── Dockerfile          # 前端容器配置
 │   └── nginx.conf          # Nginx 配置
+├── docker/                  # Docker 配置
+│   └── daemon.json         # Docker 镜像加速配置
 ├── docker-compose.yml      # Docker 编排配置
 ├── .env.example            # 环境变量模板
-├── start.sh                # 启动脚本 (Bash)
-├── start.bat               # 启动脚本 (CMD)
-└── start.ps1               # 启动脚本 (PowerShell)
+└── .gitignore              # Git 忽略文件
 ```
 
 ## 技术栈
@@ -53,8 +53,9 @@ computing-power/
 
 - Python 3.12+
 - Node.js 18+
-- PostgreSQL 数据库
 - Docker (可选，用于容器部署)
+
+**注意**: 如果使用 Docker 部署，PostgreSQL 数据库会自动创建，无需额外安装。
 
 ### 1. 配置环境变量
 
@@ -90,31 +91,24 @@ BACKEND_PORT=8001
 FRONTEND_PORT=5173
 ```
 
-### 2. 启动服务
+### 2. 配置 Docker 镜像加速 (可选)
 
-#### 方式一：使用启动脚本 (推荐)
+如果使用 Docker 部署，可以配置镜像加速以提高拉取速度：
 
 ```bash
-# Linux/Mac (Bash)
-chmod +x start.sh
-./start.sh dev        # 开发环境
-./start.sh start      # Docker 容器部署
-./start.sh stop       # 停止容器
-./start.sh status     # 查看状态
-./start.sh logs       # 查看日志
+# Linux/Mac
+sudo mkdir -p /etc/docker
+sudo cp docker/daemon.json /etc/docker/daemon.json
+sudo systemctl restart docker
 
-# Windows CMD
-start.bat dev         # 开发环境
-start.bat start       # Docker 容器部署
-start.bat stop        # 停止容器
-
-# Windows PowerShell
-.\start.ps1 dev       # 开发环境
-.\start.ps1 start     # Docker 容器部署
-.\start.ps1 stop      # 停止容器
+# Windows
+# 将 docker/daemon.json 内容复制到 Docker Desktop 的配置中
+# Settings -> Docker Engine
 ```
 
-#### 方式二：手动启动
+### 3. 启动服务
+
+#### 方式一：手动启动 (开发环境)
 
 **后端服务：**
 
@@ -132,6 +126,9 @@ source .venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
+
+# 初始化本地数据库
+python -m app.init_local_db
 
 # 启动服务
 python main.py
@@ -152,7 +149,7 @@ npm run dev
 npm run build
 ```
 
-#### 方式三：Docker 容器部署
+#### 方式二：Docker 容器部署 (生产环境)
 
 ```bash
 # 构建并启动
@@ -168,7 +165,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-### 3. 访问服务
+### 4. 访问服务
 
 - **前端界面**: http://localhost:5173
 - **后端 API**: http://localhost:8001
@@ -185,6 +182,34 @@ docker-compose down
 |--------|------|----------|
 | PostgreSQL | 远程业务数据 | 通过环境变量配置 |
 | SQLite | 本地缓存数据 | 自动创建于 `backend/data/local.db` |
+
+**数据库初始化：**
+
+首次运行需要初始化数据库表和配置：
+
+```bash
+# 初始化本地 SQLite 数据库
+cd backend
+python -m app.init_local_db
+
+# 创建远程 PostgreSQL 数据库表（可选，如果表不存在）
+python create_dict_table.py
+python create_system_config.py
+```
+
+**数据库表结构：**
+
+PostgreSQL 远程数据库包含以下主要表：
+- `sys_dict_data` - 字典数据表（设备用途等）
+- `system_config` - 系统配置表
+- 其他业务数据表（设备、GPU卡、组织等）
+
+SQLite 本地数据库包含以下表：
+- `local_system_config` - 本地系统配置
+- `local_daily_gpu_usage_summary` - GPU使用率日汇总
+- `local_daily_device_summary` - 设备使用率日汇总
+- `local_org_gpu_usage_summary` - 组织GPU使用率汇总
+- `local_statistics_data` - 统计数据缓存
 
 **缓存架构说明：**
 
@@ -262,7 +287,54 @@ docker-compose up
 | GET | `/api/ranking/*` | 排名数据 |
 | GET | `/api/cache/status` | 缓存状态 |
 | POST | `/api/cache/sync` | 手动同步缓存 |
-| GET | `/api/admin/*` | 管理接口 |
+| GET | `/api/admin/config` | 获取系统配置 |
+| POST | `/api/admin/config` | 更新系统配置 |
+| GET | `/api/admin/aggregation/status` | 数据聚合状态 |
+| POST | `/api/admin/aggregation/trigger` | 触发数据聚合 |
+| GET | `/api/admin/aggregation/daily` | 日汇总数据统计 |
+| GET | `/api/admin/aggregation/device` | 设备汇总数据统计 |
+
+### 系统配置接口
+
+**获取系统配置：**
+```
+GET /api/admin/config
+```
+
+**更新系统配置：**
+```
+POST /api/admin/config
+Content-Type: application/json
+
+{
+  "work_hour_start": 9,
+  "work_hour_end": 18,
+  "high_usage_threshold": 60.0,
+  "low_usage_threshold": 30.0
+}
+```
+
+### 数据聚合接口
+
+**查看聚合状态：**
+```
+GET /api/admin/aggregation/status
+```
+
+**手动触发聚合：**
+```
+POST /api/admin/aggregation/trigger
+```
+
+**查看日汇总统计：**
+```
+GET /api/admin/aggregation/daily?days=30
+```
+
+**查看设备汇总统计：**
+```
+GET /api/admin/aggregation/device?days=30
+```
 
 ### 缓存管理接口
 
@@ -277,6 +349,84 @@ POST /api/cache/sync?force=true
 ```
 
 完整 API 文档请访问: http://localhost:8001/docs
+
+## 系统功能
+
+### 核心功能
+
+- **实时监控**: 实时展示 GPU 设备使用率、显存使用情况等关键指标
+- **数据可视化**: 通过图表展示资源趋势、使用率趋势、使用率预警等
+- **统计分析**: 提供全国、地方厅局、部机关等多维度的统计分析
+- **排名展示**: 展示各地区/组织 GPU 使用率排名
+- **组织详情**: 支持查看组织机构的详细使用情况，包括设备详情和使用详情
+- **设备详情**: 支持查看单个设备的详细使用情况，支持自定义时间范围查询
+- **系统配置**: 支持配置工作时段、使用率阈值等系统参数
+- **数据聚合**: 自动聚合历史数据，支持手动触发聚合
+- **缓存管理**: 智能缓存静态数据和汇总数据，提升查询性能
+
+### 前端组件
+
+| 组件 | 说明 | 功能 |
+|------|------|------|
+| `LeftPanel.vue` | 左侧面板 | 展示资源趋势、使用率趋势、使用率预警 |
+| `CenterPanel.vue` | 中央面板 | 展示概览统计、全国/地方/部机关分布图表 |
+| `RightPanel.vue` | 右侧面板 | 展示全国及各分组使用率排名 |
+| `AdminPanel.vue` | 管理面板 | 系统配置和数据聚合管理 |
+| `OrgDetailDialog.vue` | 组织详情弹窗 | 展示组织机构的详细使用情况 |
+| `DeviceUsageDetailDialog.vue` | 设备详情弹窗 | 展示单个设备的详细使用情况 |
+| `ThemeSwitcher.vue` | 主题切换器 | 支持明暗主题切换 |
+| `PanelExpandContent.vue` | 面板展开内容 | 展示面板展开后的详细内容 |
+
+### 数据分析维度
+
+- **时间维度**: 支持按月、季度、半年、年等时间范围查看趋势
+- **组织维度**: 支持全国、地方厅局、部机关等多维度分析
+- **设备维度**: 支持按设备、GPU卡等粒度查看使用情况
+- **使用率维度**: 支持高使用率、低使用率等预警分析
+
+## 数据管理工具
+
+### 数据聚合脚本
+
+项目提供了多个数据聚合工具脚本：
+
+| 脚本 | 说明 | 使用场景 |
+|------|------|----------|
+| `aggregate_week_data.py` | 聚合最近7天的数据 | 日常数据更新 |
+| `run_agg_data.py` | 聚合指定天数的数据 | 快速聚合最近数据 |
+| `reset_aggregation.py` | 清空并重新生成所有聚合数据 | 数据修复或首次初始化 |
+
+**使用示例：**
+
+```bash
+# 聚合最近7天的数据
+python aggregate_week_data.py
+
+# 聚合最近3天的数据
+python run_agg_data.py
+
+# 清空并重新生成所有聚合数据（谨慎使用）
+python reset_aggregation.py
+```
+
+### 数据库管理脚本
+
+| 脚本 | 说明 |
+|------|------|
+| `create_dict_table.py` | 创建字典数据表并初始化设备用途字典 |
+| `create_system_config.py` | 创建系统配置表 |
+| `init_local_db.py` | 初始化本地 SQLite 数据库 |
+
+**使用示例：**
+
+```bash
+# 创建远程数据库表
+python create_dict_table.py
+python create_system_config.py
+
+# 初始化本地数据库
+python -m app.init_local_db
+```
 
 ## 开发指南
 
