@@ -1,0 +1,15 @@
+{
+  "registry-mirrors": [
+    "https://docker.1ms.run",
+    "https://docker.xuanyuan.me"
+  ],
+  "insecure-registries": [],
+  "debug": false,
+  "experimental": false,
+  "builder": {
+    "gc": {
+      "enabled": true,
+      "defaultKeepStorage": "20GB"
+    }
+  }
+}

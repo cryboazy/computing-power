@@ -1,0 +1,275 @@
+export const themes = {
+  ocean: {
+    name: '深海蓝',
+    icon: '🌊',
+    colors: {
+      primary: '#4a7cb0',
+      secondary: '#6b9bc3',
+      bgStart: '#0d1520',
+      bgMiddle: '#152030',
+      bgEnd: '#0d1520',
+      panelBgStart: 'rgba(15, 25, 40, 0.92)',
+      panelBgEnd: 'rgba(15, 25, 40, 0.75)',
+      inputBg: 'rgba(15, 25, 40, 0.8)',
+      hoverBg: 'rgba(74, 124, 176, 0.15)',
+      border: 'rgba(74, 124, 176, 0.28)',
+      borderLight: 'rgba(74, 124, 176, 0.18)',
+      borderHeavy: 'rgba(74, 124, 176, 0.38)',
+      text: '#e8eef4',
+      textSecondary: 'rgba(232, 238, 244, 0.72)',
+      textMuted: 'rgba(232, 238, 244, 0.52)',
+      shadow: 'rgba(74, 124, 176, 0.1)',
+      shadowHeavy: 'rgba(74, 124, 176, 0.15)',
+      glow: 'rgba(74, 124, 176, 0.35)',
+      glowHeavy: 'rgba(74, 124, 176, 0.55)',
+      chart1: '#4a7cb0',
+      chart2: '#6b9bc3',
+      chart3: '#b87a7a',
+      chart4: '#c4a574',
+      chart5: '#6a9e7c',
+      chart6: '#8a9aaa',
+      success: '#6a9e7c',
+      warning: '#c4a574',
+      danger: '#b87a7a',
+      info: '#8a9aaa',
+      rank1: '#b8a045',
+      rank2: '#9a9a9a',
+      rank3: '#a08050',
+      usageLow: '#6a9e7c',
+      usageMedium: '#c4a574',
+      usageHigh: '#b87a7a'
+    }
+  },
+  forest: {
+    name: '森林绿',
+    icon: '🌲',
+    colors: {
+      primary: '#5a8a6a',
+      secondary: '#7aa08a',
+      bgStart: '#0d1510',
+      bgMiddle: '#152518',
+      bgEnd: '#0d1510',
+      panelBgStart: 'rgba(15, 25, 18, 0.92)',
+      panelBgEnd: 'rgba(15, 25, 18, 0.75)',
+      inputBg: 'rgba(15, 25, 18, 0.8)',
+      hoverBg: 'rgba(90, 138, 106, 0.15)',
+      border: 'rgba(90, 138, 106, 0.28)',
+      borderLight: 'rgba(90, 138, 106, 0.18)',
+      borderHeavy: 'rgba(90, 138, 106, 0.38)',
+      text: '#e8f0ea',
+      textSecondary: 'rgba(232, 240, 234, 0.72)',
+      textMuted: 'rgba(232, 240, 234, 0.52)',
+      shadow: 'rgba(90, 138, 106, 0.1)',
+      shadowHeavy: 'rgba(90, 138, 106, 0.15)',
+      glow: 'rgba(90, 138, 106, 0.35)',
+      glowHeavy: 'rgba(90, 138, 106, 0.55)',
+      chart1: '#5a8a6a',
+      chart2: '#7aa08a',
+      chart3: '#b88080',
+      chart4: '#c4a570',
+      chart5: '#5080a0',
+      chart6: '#8a9a8a',
+      success: '#5a8a6a',
+      warning: '#c4a570',
+      danger: '#b88080',
+      info: '#8a9a8a',
+      rank1: '#b8a045',
+      rank2: '#9a9a9a',
+      rank3: '#a08050',
+      usageLow: '#5080a0',
+      usageMedium: '#c4a570',
+      usageHigh: '#b88080'
+    }
+  },
+  sky: {
+    name: '天空蓝',
+    icon: '☁️',
+    colors: {
+      primary: '#5b8def',
+      secondary: '#7ba3f7',
+      bgStart: '#f0f4f8',
+      bgMiddle: '#e2e8f0',
+      bgEnd: '#f0f4f8',
+      panelBgStart: 'rgba(255, 255, 255, 0.95)',
+      panelBgEnd: 'rgba(248, 250, 252, 0.9)',
+      inputBg: 'rgba(255, 255, 255, 0.9)',
+      hoverBg: 'rgba(91, 141, 239, 0.1)',
+      border: 'rgba(91, 141, 239, 0.25)',
+      borderLight: 'rgba(91, 141, 239, 0.15)',
+      borderHeavy: 'rgba(91, 141, 239, 0.35)',
+      text: '#1e293b',
+      textSecondary: 'rgba(30, 41, 59, 0.7)',
+      textMuted: 'rgba(30, 41, 59, 0.5)',
+      shadow: 'rgba(91, 141, 239, 0.08)',
+      shadowHeavy: 'rgba(91, 141, 239, 0.12)',
+      glow: 'rgba(91, 141, 239, 0.3)',
+      glowHeavy: 'rgba(91, 141, 239, 0.5)',
+      chart1: '#5b8def',
+      chart2: '#7ba3f7',
+      chart3: '#c88080',
+      chart4: '#c4a574',
+      chart5: '#6a9e7c',
+      chart6: '#8a9aaa',
+      success: '#6a9e7c',
+      warning: '#c4a574',
+      danger: '#c88080',
+      info: '#8a9aaa',
+      rank1: '#a89040',
+      rank2: '#8a8a8a',
+      rank3: '#907040',
+      usageLow: '#6a9e7c',
+      usageMedium: '#c4a574',
+      usageHigh: '#c88080'
+    }
+  },
+  aurora: {
+    name: '极光青',
+    icon: '🌌',
+    colors: {
+      primary: '#4a9090',
+      secondary: '#6aa8a8',
+      bgStart: '#0d1518',
+      bgMiddle: '#152528',
+      bgEnd: '#0d1518',
+      panelBgStart: 'rgba(15, 25, 28, 0.92)',
+      panelBgEnd: 'rgba(15, 25, 28, 0.75)',
+      inputBg: 'rgba(15, 25, 28, 0.8)',
+      hoverBg: 'rgba(74, 144, 144, 0.15)',
+      border: 'rgba(74, 144, 144, 0.28)',
+      borderLight: 'rgba(74, 144, 144, 0.18)',
+      borderHeavy: 'rgba(74, 144, 144, 0.38)',
+      text: '#e8f0f0',
+      textSecondary: 'rgba(232, 240, 240, 0.72)',
+      textMuted: 'rgba(232, 240, 240, 0.52)',
+      shadow: 'rgba(74, 144, 144, 0.1)',
+      shadowHeavy: 'rgba(74, 144, 144, 0.15)',
+      glow: 'rgba(74, 144, 144, 0.35)',
+      glowHeavy: 'rgba(74, 144, 144, 0.55)',
+      chart1: '#4a9090',
+      chart2: '#6aa8a8',
+      chart3: '#b88090',
+      chart4: '#c4a570',
+      chart5: '#6a9e7c',
+      chart6: '#8a9a9a',
+      success: '#6a9e7c',
+      warning: '#c4a570',
+      danger: '#b88090',
+      info: '#8a9a9a',
+      rank1: '#b8a045',
+      rank2: '#9a9a9a',
+      rank3: '#a08050',
+      usageLow: '#6a9e7c',
+      usageMedium: '#c4a570',
+      usageHigh: '#b88090'
+    }
+  },
+  mint: {
+    name: '薄荷绿',
+    icon: '🍃',
+    colors: {
+      primary: '#6a9a8a',
+      secondary: '#8ab0a0',
+      bgStart: '#f0f6f4',
+      bgMiddle: '#e4ece8',
+      bgEnd: '#f0f6f4',
+      panelBgStart: 'rgba(255, 255, 255, 0.95)',
+      panelBgEnd: 'rgba(248, 252, 250, 0.9)',
+      inputBg: 'rgba(255, 255, 255, 0.9)',
+      hoverBg: 'rgba(106, 154, 138, 0.1)',
+      border: 'rgba(106, 154, 138, 0.25)',
+      borderLight: 'rgba(106, 154, 138, 0.15)',
+      borderHeavy: 'rgba(106, 154, 138, 0.35)',
+      text: '#1a2820',
+      textSecondary: 'rgba(26, 40, 32, 0.7)',
+      textMuted: 'rgba(26, 40, 32, 0.5)',
+      shadow: 'rgba(106, 154, 138, 0.08)',
+      shadowHeavy: 'rgba(106, 154, 138, 0.12)',
+      glow: 'rgba(106, 154, 138, 0.3)',
+      glowHeavy: 'rgba(106, 154, 138, 0.5)',
+      chart1: '#6a9a8a',
+      chart2: '#8ab0a0',
+      chart3: '#c08878',
+      chart4: '#c0a068',
+      chart5: '#5888b0',
+      chart6: '#8a9a8a',
+      success: '#6a9a8a',
+      warning: '#c0a068',
+      danger: '#c08878',
+      info: '#8a9a8a',
+      rank1: '#a89040',
+      rank2: '#8a8a8a',
+      rank3: '#907040',
+      usageLow: '#5888b0',
+      usageMedium: '#c0a068',
+      usageHigh: '#c08878'
+    }
+  },
+  night: {
+    name: '暗夜紫',
+    icon: '🌙',
+    colors: {
+      primary: '#6a68a0',
+      secondary: '#8a88b8',
+      bgStart: '#0e0d15',
+      bgMiddle: '#161520',
+      bgEnd: '#0e0d15',
+      panelBgStart: 'rgba(18, 17, 28, 0.92)',
+      panelBgEnd: 'rgba(18, 17, 28, 0.75)',
+      inputBg: 'rgba(18, 17, 28, 0.8)',
+      hoverBg: 'rgba(106, 104, 160, 0.15)',
+      border: 'rgba(106, 104, 160, 0.28)',
+      borderLight: 'rgba(106, 104, 160, 0.18)',
+      borderHeavy: 'rgba(106, 104, 160, 0.38)',
+      text: '#e8e8f0',
+      textSecondary: 'rgba(232, 232, 240, 0.72)',
+      textMuted: 'rgba(232, 232, 240, 0.52)',
+      shadow: 'rgba(106, 104, 160, 0.1)',
+      shadowHeavy: 'rgba(106, 104, 160, 0.15)',
+      glow: 'rgba(106, 104, 160, 0.35)',
+      glowHeavy: 'rgba(106, 104, 160, 0.55)',
+      chart1: '#6a68a0',
+      chart2: '#8a88b8',
+      chart3: '#b88090',
+      chart4: '#c4a570',
+      chart5: '#6a9e7c',
+      chart6: '#8a8a9a',
+      success: '#6a9e7c',
+      warning: '#c4a570',
+      danger: '#b88090',
+      info: '#8a8a9a',
+      rank1: '#b8a045',
+      rank2: '#9a9a9a',
+      rank3: '#a08050',
+      usageLow: '#6a9e7c',
+      usageMedium: '#c4a570',
+      usageHigh: '#b88090'
+    }
+  }
+}
+
+export const themeKeys = Object.keys(themes)
+
+export const getTheme = (key) => themes[key] || themes.ocean
+
+export const applyTheme = (themeKey) => {
+  const theme = getTheme(themeKey)
+  const root = document.documentElement
+  
+  Object.entries(theme.colors).forEach(([name, value]) => {
+    const cssVarName = name.replace(/([A-Z])/g, '-$1').toLowerCase()
+    root.style.setProperty(`--theme-${cssVarName}`, value)
+  })
+  
+  localStorage.setItem('theme', themeKey)
+  
+  document.documentElement.setAttribute('data-theme', themeKey)
+}
+
+export const getStoredTheme = () => {
+  return localStorage.getItem('theme') || 'ocean'
+}
+
+export const getThemeColors = (themeKey) => {
+  const theme = getTheme(themeKey)
+  return theme.colors
+}
