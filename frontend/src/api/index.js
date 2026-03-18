@@ -14,7 +14,8 @@ api.interceptors.response.use(
 )
 
 export const dashboardApi = {
-  getOverviewStats: (timeType = 'work') => api.get('/overview/stats', { params: { time_type: timeType } }),
+  getOverviewStats: (timeRange = 'month', timeType = 'work') => 
+    api.get('/overview/stats', { params: { time_range: timeRange, time_type: timeType } }),
   
   getDeviceCountTrend: (timeRange = 'month', timeType = 'work') => 
     api.get('/trend/device-count', { params: { time_range: timeRange, time_type: timeType } }),
@@ -42,12 +43,14 @@ export const dashboardApi = {
   getPurposeDict: () => api.get('/dict/purpose'),
   
   getProvinceDistribution: (timeType = 'work') => api.get('/map/province', { params: { time_type: timeType } }),
-  getLocalStats: (timeType = 'work') => api.get('/local/stats', { params: { time_type: timeType } }),
+  getLocalStats: (timeRange = 'month', timeType = 'work') => 
+    api.get('/local/stats', { params: { time_range: timeRange, time_type: timeType } }),
   getLocalGpuTier: () => api.get('/local/gpu-tier'),
   getLocalPurpose: () => api.get('/local/purpose'),
   getLocalTrend: (timeType = 'work') => api.get('/local/trend', { params: { time_type: timeType } }),
   getCentralBubble: (timeType = 'work') => api.get('/bubble/central', { params: { time_type: timeType } }),
-  getCentralStats: (timeType = 'work') => api.get('/central/stats', { params: { time_type: timeType } }),
+  getCentralStats: (timeRange = 'month', timeType = 'work') => 
+    api.get('/central/stats', { params: { time_range: timeRange, time_type: timeType } }),
   getCentralGpuTier: () => api.get('/central/gpu-tier'),
   getCentralPurpose: () => api.get('/central/purpose'),
   getCentralTrend: (timeType = 'work') => api.get('/central/trend', { params: { time_type: timeType } }),
@@ -77,7 +80,10 @@ export const dashboardApi = {
     return api.get('/carousel/usage-trend', { params })
   },
   
-  getOrgDetail: (orgId) => api.get(`/org/detail/${orgId}`),
+  getOrgDetail: (orgId, timeRange = 'month', timeType = 'work') => {
+    const params = { time_range: timeRange, time_type: timeType }
+    return api.get(`/org/detail/${orgId}`, { params })
+  },
   getOrgUsageTrend: (orgId, timeType = 'all', startDate = null, endDate = null, purpose = null) => {
     const params = { time_type: timeType }
     if (startDate) params.start_date = startDate

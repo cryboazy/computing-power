@@ -459,6 +459,7 @@ const showPanelExpand = inject('showPanelExpand')
 const showOrgDetail = inject('showOrgDetail')
 const globalPageSize = inject('globalPageSize')
 const setGlobalPageSizeFromInject = inject('setGlobalPageSize')
+const globalTimeRange = inject('globalTimeRange')
 const { getAllColors } = useTheme()
 
 const getUsageColor = (value) => {
@@ -1820,7 +1821,7 @@ const drillChartOption = computed(() => {
 
 const loadOverviewStats = async () => {
   try {
-    overviewStats.value = await dashboardApi.getOverviewStats(timeType.value)
+    overviewStats.value = await dashboardApi.getOverviewStats(globalTimeRange.value, timeType.value)
   } catch (error) {
     console.error('Failed to fetch overview stats:', error)
   }
@@ -1828,7 +1829,7 @@ const loadOverviewStats = async () => {
 
 const loadLocalStats = async () => {
   try {
-    localStats.value = await dashboardApi.getLocalStats(timeType.value)
+    localStats.value = await dashboardApi.getLocalStats(globalTimeRange.value, timeType.value)
   } catch (error) {
     console.error('Failed to fetch local stats:', error)
   }
@@ -1836,7 +1837,7 @@ const loadLocalStats = async () => {
 
 const loadCentralStats = async () => {
   try {
-    centralStats.value = await dashboardApi.getCentralStats(timeType.value)
+    centralStats.value = await dashboardApi.getCentralStats(globalTimeRange.value, timeType.value)
   } catch (error) {
     console.error('Failed to fetch central stats:', error)
   }
@@ -1863,7 +1864,7 @@ const fetchData = async () => {
       centralTrend,
       carousel
     ] = await Promise.all([
-      dashboardApi.getOverviewStats(timeType.value),
+      dashboardApi.getOverviewStats(globalTimeRange.value, timeType.value),
       dashboardApi.getOrgTypeDistribution(timeType.value),
       dashboardApi.getNetworkDistribution(),
       dashboardApi.getNetworkDistributionByOrg(),
@@ -1871,11 +1872,11 @@ const fetchData = async () => {
       dashboardApi.getPurposeDistribution(),
       dashboardApi.getPurposeDistributionByOrg(),
       dashboardApi.getProvinceDistribution(timeType.value),
-      dashboardApi.getLocalStats(timeType.value),
+      dashboardApi.getLocalStats(globalTimeRange.value, timeType.value),
       dashboardApi.getLocalGpuTier(),
       dashboardApi.getLocalPurpose(),
       dashboardApi.getCentralBubble(timeType.value),
-      dashboardApi.getCentralStats(timeType.value),
+      dashboardApi.getCentralStats(globalTimeRange.value, timeType.value),
       dashboardApi.getCentralGpuTier(),
       dashboardApi.getCentralPurpose(),
       dashboardApi.getCentralTrend(timeType.value),

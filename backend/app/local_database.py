@@ -98,8 +98,33 @@ def init_local_db():
                 )
                 db.add(config)
         
+        # 初始化设备用途字典数据
+        purpose_dicts = [
+            {"id": 1, "dict_label": "训练", "dict_value": 1, "dict_sort": 1},
+            {"id": 2, "dict_label": "研发", "dict_value": 2, "dict_sort": 2},
+            {"id": 3, "dict_label": "推理", "dict_value": 3, "dict_sort": 3}
+        ]
+        
+        for d in purpose_dicts:
+            existing = db.query(LocalPurposeDict).filter(
+                LocalPurposeDict.dict_type == 'device_purpose',
+                LocalPurposeDict.dict_value == d["dict_value"]
+            ).first()
+            if not existing:
+                purpose_dict = LocalPurposeDict(
+                    id=d["id"],
+                    dict_type='device_purpose',
+                    dict_label=d["dict_label"],
+                    dict_value=d["dict_value"],
+                    dict_sort=d["dict_sort"],
+                    status=1,
+                    remark=f'GPU设备用途-{d["dict_label"]}',
+                    deleted=0
+                )
+                db.add(purpose_dict)
+        
         db.commit()
-        print("系统配置初始化完成")
+        print("系统配置和设备用途字典初始化完成")
     finally:
         db.close()
 

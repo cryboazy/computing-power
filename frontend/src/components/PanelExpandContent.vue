@@ -369,6 +369,7 @@ use([
 
 const showOrgDetail = inject('showOrgDetail')
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
+const timeType = inject('timeType')
 const { getAllColors } = useTheme()
 
 const props = defineProps({
@@ -1264,8 +1265,8 @@ const fetchLeftPanelData = async () => {
       dashboardApi.getDeviceCountTrend(props.timeRange),
       dashboardApi.getMemoryTotalTrend(props.timeRange),
       dashboardApi.getComputeTotalTrend(props.timeRange),
-      dashboardApi.getGpuUsageTrend(props.timeRange),
-      dashboardApi.getUsageWarningBar(props.timeRange)
+      dashboardApi.getGpuUsageTrend(props.timeRange, timeType.value),
+      dashboardApi.getUsageWarningBar(props.timeRange, timeType.value)
     ])
 
     deviceCountData.value = deviceCount || []
@@ -1375,7 +1376,7 @@ const fetchRightPanelData = async () => {
   try {
     if (props.provinceName) {
       console.log('Fetching province ranking for:', props.provinceName)
-      const ranking = await dashboardApi.getProvinceRanking(props.provinceName, props.timeRange)
+      const ranking = await dashboardApi.getProvinceRanking(props.provinceName, props.timeRange, timeType.value)
       console.log('Province ranking data:', ranking)
       provinceRanking.value = ranking
       provinceName.value = props.provinceName
@@ -1386,14 +1387,14 @@ const fetchRightPanelData = async () => {
       const targetGroup = groups.find(g => g.name === props.groupName)
       console.log('Target group:', targetGroup)
       if (targetGroup) {
-        const ranking = await dashboardApi.getGroupRanking(targetGroup.id, props.timeRange)
+        const ranking = await dashboardApi.getGroupRanking(targetGroup.id, props.timeRange, timeType.value)
         console.log('Group ranking data:', ranking)
         groupRanking.value = ranking
         groupName.value = props.groupName
       }
     } else {
       console.log('Fetching all ranking')
-      const all = await dashboardApi.getAllRanking(props.timeRange)
+      const all = await dashboardApi.getAllRanking(props.timeRange, timeType.value)
       console.log('All ranking data:', all)
       allRanking.value = all
     }
@@ -1474,9 +1475,9 @@ const handleExpandPurposeChartClick = (params) => {
 }
 
 watch(
-  () => [props.panelType, props.subType, props.timeRange, props.groupName, props.provinceName],
-  ([newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName]) => {
-    console.log('watch triggered:', newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName)
+  () => [props.panelType, props.subType, props.timeRange, props.groupName, props.provinceName, timeType.value],
+  ([newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName, newTimeType]) => {
+    console.log('watch triggered:', newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName, newTimeType)
     if (newPanelType && newSubType) {
       loadData()
     }

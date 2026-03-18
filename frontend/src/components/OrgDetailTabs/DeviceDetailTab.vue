@@ -115,6 +115,12 @@
         @row-click="handleDeviceClick"
       >
         <el-table-column
+          type="index"
+          label="序号"
+          width="60"
+          align="center"
+        />
+        <el-table-column
           prop="name"
           label="设备名称"
           min-width="120"
@@ -188,7 +194,7 @@
         <el-table-column
           prop="net_module_name"
           label="运行网络"
-          width="100"
+          width="120"
           sortable
           align="center"
           show-overflow-tooltip
@@ -219,9 +225,19 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-tag :type="getOnlineStatusType(row.is_online)" size="small">
+            <el-tag :style="getOnlineStatusStyle(row.is_online)" size="small">
               {{ getOnlineStatusText(row.is_online) }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="updated_at"
+          label="更新时间"
+          width="160"
+          align="center"
+        >
+          <template #default="{ row }">
+            {{ formatDateTime(row.updated_at) }}
           </template>
         </el-table-column>
       </el-table>
@@ -288,6 +304,7 @@ const pageSize = ref(20)
 const tableLoading = ref(false)
 const distributionLoading = ref(false)
 const distributionData = ref(null)
+const purposeDict = ref([])
 
 const deviceUsageDialogVisible = ref(false)
 const selectedDeviceId = ref(null)
@@ -320,10 +337,15 @@ const getUsageColor = (usage) => {
   return colors.success
 }
 
-const getOnlineStatusType = (isOnline) => {
-  if (isOnline === 1) return 'success'
-  if (isOnline === 0) return 'danger'
-  return 'warning'
+const getOnlineStatusStyle = (isOnline) => {
+  const colors = getAllColors()
+  if (isOnline === 1) {
+    return { backgroundColor: colors.success + '20', borderColor: colors.success, color: colors.success }
+  } else if (isOnline === 0) {
+    return { backgroundColor: colors.danger + '20', borderColor: colors.danger, color: colors.danger }
+  } else {
+    return { backgroundColor: colors.warning + '20', borderColor: colors.warning, color: colors.warning }
+  }
 }
 
 const getOnlineStatusText = (isOnline) => {
@@ -333,22 +355,16 @@ const getOnlineStatusText = (isOnline) => {
 }
 
 const getPurposeText = (purpose) => {
-  const purposeMap = {
-    1: '训练',
-    2: '研发',
-    3: '推理'
-  }
-  return purposeMap[purpose] || '-'
+  const item = purposeDict.value.find(p => p.value === purpose)
+  return item?.label || '-'
 }
 
 const getPurposeTagStyle = (purpose) => {
   const colors = getAllColors()
-  const styleMap = {
-    1: { backgroundColor: colors.primary + '20', borderColor: colors.primary, color: colors.primary },
-    2: { backgroundColor: colors.warning + '20', borderColor: colors.warning, color: colors.warning },
-    3: { backgroundColor: colors.success + '20', borderColor: colors.success, color: colors.success }
-  }
-  return styleMap[purpose] || { backgroundColor: colors.info + '20', borderColor: colors.info, color: colors.info }
+  const chartColors = [colors.primary, colors.warning, colors.success, colors.chart1, colors.chart2, colors.chart3, colors.chart4]
+  const index = purposeDict.value.findIndex(p => p.value === purpose)
+  const color = index >= 0 ? chartColors[index % chartColors.length] : colors.info
+  return { backgroundColor: color + '20', borderColor: color, color: color }
 }
 
 const getNetworkTagColor = () => {
@@ -359,6 +375,19 @@ const getNetworkTagColor = () => {
 const getNetworkTextColor = () => {
   const colors = getAllColors()
   return colors.textLight || '#ffffff'
+}
+
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return '-'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 const handleDeviceClick = (row) => {
@@ -377,8 +406,9 @@ const exportData = () => {
   
   setTimeout(() => {
     try {
-      const headers = ['设备名称', 'GPU型号', 'GPU数量', '显存(GB)', '总算力', 'CPU核数', '内存(GB)', '存储(GB)', '使用率(%)', '运行网络', '用途', '状态']
-      const rows = allDevices.value.map(device => [
+      const headers = ['序号', '设备名称', 'GPU型号', 'GPU数量', '显存(GB)', '总算力', 'CPU核数', '内存(GB)', '存储(GB)', '使用率(%)', '运行网络', '用途', '状态', '更新时间']
+      const rows = allDevices.value.map((device, index) => [
+        index + 1,
         device.name || '',
         device.gpu_model || '',
         device.gpu_count || 0,
@@ -390,7 +420,8 @@ const exportData = () => {
         device.usage_rate || 0,
         device.net_module_name || '-',
         getPurposeText(device.purpose),
-        device.is_online === 1 ? '在线' : device.is_online === 0 ? '离线' : '异常'
+        device.is_online === 1 ? '在线' : device.is_online === 0 ? '离线' : '异常',
+        formatDateTime(device.updated_at)
       ])
       
       const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
@@ -568,6 +599,16 @@ const fetchDistributionData = async () => {
   }
 }
 
+const fetchPurposeDict = async () => {
+  try {
+    const data = await dashboardApi.getPurposeDict()
+    purposeDict.value = data || []
+  } catch (error) {
+    console.error('Failed to fetch purpose dict:', error)
+    purposeDict.value = []
+  }
+}
+
 watch(() => props.orgId, (newVal) => {
   if (newVal) {
     fetchDistributionData()
@@ -575,6 +616,7 @@ watch(() => props.orgId, (newVal) => {
 })
 
 onMounted(() => {
+  fetchPurposeDict()
   if (props.orgId) {
     fetchDistributionData()
   }

@@ -655,13 +655,20 @@ def get_purpose_dict(local_db: Session = Depends(get_local_db)):
     
     if not purpose_dicts:
         return [
-            {"value": 1, "label": "训练"},
-            {"value": 2, "label": "研发"},
-            {"value": 3, "label": "推理"}
+            {"id": 1, "dict_value": 1, "dict_label": "训练", "status": 1, "dict_sort": 1, "remark": ""},
+            {"id": 2, "dict_value": 2, "dict_label": "研发", "status": 1, "dict_sort": 2, "remark": ""},
+            {"id": 3, "dict_value": 3, "dict_label": "推理", "status": 1, "dict_sort": 3, "remark": ""}
         ]
     
     return [
-        {"value": d.dict_value, "label": d.dict_label}
+        {
+            "id": d.id,
+            "dict_value": d.dict_value,
+            "dict_label": d.dict_label,
+            "status": d.status,
+            "dict_sort": d.dict_sort,
+            "remark": d.remark
+        }
         for d in purpose_dicts
     ]
 
@@ -764,9 +771,7 @@ def get_central_bubble(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
     local_db: Session = Depends(get_local_db)
 ):
-    print(f"[DEBUG] get_central_bubble called with time_type={time_type}")
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
-    print(f"[DEBUG] central_org_ids count: {len(central_org_ids)}")
     
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
     
@@ -808,8 +813,6 @@ def get_central_bubble(
             "compute_tflops": round(compute_tflops, 2)
         })
     
-    print(f"[DEBUG] get_central_bubble result count: {len(result)}")
-    print(f"[DEBUG] get_central_bubble response: {result[:3] if result else 'empty'}")
     return result
 
 
@@ -841,20 +844,25 @@ def get_local_stats(
     
     end_date = date.today()
     start_date = end_date - timedelta(days=30)
-    
-    summaries = local_db.query(LocalDailyGpuUsageSummary).filter(
-        LocalDailyGpuUsageSummary.summary_date >= start_date,
-        LocalDailyGpuUsageSummary.summary_date <= end_date
-    ).all()
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
     
     if time_type == "work":
-        values = [float(s.avg_gpu_usage_rate_work or 0) for s in summaries if s.avg_gpu_usage_rate_work is not None]
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_work
     elif time_type == "nonwork":
-        values = [float(s.avg_gpu_usage_rate_nonwork or 0) for s in summaries if s.avg_gpu_usage_rate_nonwork is not None]
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_nonwork
     else:
-        values = [float(s.avg_gpu_usage_rate or 0) for s in summaries if s.avg_gpu_usage_rate is not None]
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
     
-    avg_gpu_usage = round(sum(values) / len(values), 2) if values else 0
+    org_summaries = local_db.query(
+        func.avg(usage_field).label('avg_usage')
+    ).filter(
+        LocalOrgGpuUsageSummary.organization_id3.in_(local_org_ids),
+        LocalOrgGpuUsageSummary.summary_time >= start_datetime,
+        LocalOrgGpuUsageSummary.summary_time <= end_datetime
+    ).first()
+    
+    avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
     
     return {
         "total_devices": total_devices,
@@ -982,20 +990,25 @@ def get_central_stats(
     
     end_date = date.today()
     start_date = end_date - timedelta(days=30)
-    
-    summaries = local_db.query(LocalDailyGpuUsageSummary).filter(
-        LocalDailyGpuUsageSummary.summary_date >= start_date,
-        LocalDailyGpuUsageSummary.summary_date <= end_date
-    ).all()
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
     
     if time_type == "work":
-        values = [float(s.avg_gpu_usage_rate_work or 0) for s in summaries if s.avg_gpu_usage_rate_work is not None]
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_work
     elif time_type == "nonwork":
-        values = [float(s.avg_gpu_usage_rate_nonwork or 0) for s in summaries if s.avg_gpu_usage_rate_nonwork is not None]
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_nonwork
     else:
-        values = [float(s.avg_gpu_usage_rate or 0) for s in summaries if s.avg_gpu_usage_rate is not None]
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
     
-    avg_gpu_usage = round(sum(values) / len(values), 2) if values else 0
+    org_summaries = local_db.query(
+        func.avg(usage_field).label('avg_usage')
+    ).filter(
+        LocalOrgGpuUsageSummary.organization_id3.in_(central_org_ids),
+        LocalOrgGpuUsageSummary.summary_time >= start_datetime,
+        LocalOrgGpuUsageSummary.summary_time <= end_datetime
+    ).first()
+    
+    avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
     
     return {
         "total_devices": total_devices,
@@ -1161,7 +1174,7 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
         org_usage = local_db.query(
             func.avg(usage_field).label('avg_usage')
         ).filter(
-            LocalOrgGpuUsageSummary.organization_name3 == r.name,
+            LocalOrgGpuUsageSummary.organization_id3 == r.id,
             LocalOrgGpuUsageSummary.summary_time >= start_datetime,
             LocalOrgGpuUsageSummary.summary_time <= end_datetime
         ).first()
@@ -1322,7 +1335,7 @@ def get_province_ranking(
         org_usage = local_db.query(
             func.avg(usage_field).label('avg_usage')
         ).filter(
-            LocalOrgGpuUsageSummary.organization_name3 == r.name,
+            LocalOrgGpuUsageSummary.organization_id3 == r.id,
             LocalOrgGpuUsageSummary.summary_time >= start_datetime,
             LocalOrgGpuUsageSummary.summary_time <= end_datetime
         ).first()
@@ -1560,6 +1573,8 @@ def trigger_cache_sync(
 @router.get("/org/detail/{org_id}")
 def get_org_detail(
     org_id: int,
+    time_range: str = Query('month', description="时间范围: month(月), quarter(季), half_year(半年), year(年)"),
+    time_type: str = Query('work', description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
     local_db: Session = Depends(get_local_db),
     db: Session = Depends(get_db)
 ):
@@ -1578,6 +1593,35 @@ def get_org_detail(
     total_memory_gb = 0
     total_compute_tflops = 0
     total_gpus = 0
+    
+    time_range_days = {
+        'month': 30,
+        'quarter': 90,
+        'half_year': 180,
+        'year': 365
+    }
+    days = time_range_days.get(time_range, 30)
+    end_date = date.today()
+    start_date = end_date - timedelta(days=days)
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
+    if time_type == "work":
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_work
+    elif time_type == "nonwork":
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_nonwork
+    else:
+        usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
+    
+    org_usage = local_db.query(
+        func.avg(usage_field).label('avg_usage')
+    ).filter(
+        LocalOrgGpuUsageSummary.organization_id3 == org_id,
+        LocalOrgGpuUsageSummary.summary_time >= start_datetime,
+        LocalOrgGpuUsageSummary.summary_time <= end_datetime
+    ).first()
+    
+    avg_usage_rate = round(float(org_usage.avg_usage or 0), 2) if org_usage and org_usage.avg_usage else 0
     
     device_list = []
     for device in devices:
@@ -1609,6 +1653,10 @@ def get_org_detail(
         if latest_monitor and latest_monitor.avg_gpu_utilization is not None:
             avg_usage = float(latest_monitor.avg_gpu_utilization)
         
+        updated_at = None
+        if latest_monitor:
+            updated_at = latest_monitor.collection_timestamp.isoformat() if latest_monitor.collection_timestamp else None
+
         device_list.append({
             "id": device.id,
             "name": device.name,
@@ -1623,14 +1671,9 @@ def get_org_detail(
             "usage_rate": avg_usage,
             "is_online": is_online,
             "purpose": device.purpose,
-            "net_module_name": device.net_module_name
+            "net_module_name": device.net_module_name,
+            "updated_at": updated_at
         })
-    
-    avg_usage_rate = 0
-    if device_list:
-        usages = [d["usage_rate"] for d in device_list if d["usage_rate"] > 0]
-        if usages:
-            avg_usage_rate = round(sum(usages) / len(usages), 2)
     
     return {
         "org_id": org.id,
@@ -1664,6 +1707,9 @@ def get_org_usage_trend(
     else:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else date.today()
+    
+    start_datetime = datetime.combine(start_date_obj, datetime.min.time())
+    end_datetime = datetime.combine(end_date_obj, datetime.max.time())
     
     monthly_data = {}
     daily_data = {}
@@ -1730,8 +1776,8 @@ def get_org_usage_trend(
     else:
         for summary in local_db.query(LocalOrgGpuUsageSummary).filter(
             LocalOrgGpuUsageSummary.organization_id3 == org_id,
-            LocalOrgGpuUsageSummary.summary_time >= start_date_obj,
-            LocalOrgGpuUsageSummary.summary_time <= end_date_obj
+            LocalOrgGpuUsageSummary.summary_time >= start_datetime,
+            LocalOrgGpuUsageSummary.summary_time <= end_datetime
         ).order_by(LocalOrgGpuUsageSummary.summary_time).all():
             month_key = summary.summary_time.strftime('%Y-%m')
             day_key = summary.summary_time.strftime('%Y-%m-%d')

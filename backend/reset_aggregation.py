@@ -1,12 +1,14 @@
 from datetime import date, timedelta
 from sqlalchemy import text
 from app.database import SessionLocal
+from app.local_database import LocalSessionLocal
 from app.models import DeviceGpuMonitor, DailyGpuUsageSummary, DailyDeviceSummary, OrgGpuUsageSummary, StatisticsData
 from app.aggregator import DataAggregator
 
 
 def reset_and_regenerate():
     db = SessionLocal()
+    local_db = LocalSessionLocal()
     try:
         print("=== 开始清空聚合数据 ===")
         
@@ -35,7 +37,7 @@ def reset_and_regenerate():
             print(f"需要聚合 {days_to_aggregate} 天的数据")
             
             print("\n=== 开始重新生成聚合数据 ===")
-            aggregator = DataAggregator(db)
+            aggregator = DataAggregator(db, local_db)
             
             current_date = earliest
             while current_date <= latest:
@@ -53,6 +55,7 @@ def reset_and_regenerate():
         raise
     finally:
         db.close()
+        local_db.close()
 
 
 if __name__ == "__main__":

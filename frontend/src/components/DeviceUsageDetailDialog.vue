@@ -43,7 +43,7 @@
         <span>加载中...</span>
       </div>
 
-      <div v-else class="charts-container" :style="{ height: isMaximized ? 'calc(90vh - 100px)' : '66vh' }">
+      <div v-else class="charts-container">
         <div class="chart-section">
           <div class="chart-header">
             <h4>逐月平均使用率趋势</h4>
@@ -143,9 +143,18 @@ const isMaximized = ref(false)
 const dialogRef = ref(null)
 
 const dialogStyle = computed(() => {
+  if (isMaximized.value) {
+    return {
+      '--el-dialog-margin-top': '1vh',
+      '--el-dialog-height': '98vh',
+      marginTop: '1vh',
+      height: '98vh',
+      maxHeight: '98vh'
+    }
+  }
   return {
-    marginTop: isMaximized.value ? '1vh' : '8vh',
-    maxHeight: isMaximized.value ? '98vh' : '84vh'
+    marginTop: '8vh',
+    maxHeight: '84vh'
   }
 })
 
@@ -462,31 +471,51 @@ watch(() => props.deviceId, (newVal) => {
 </script>
 
 <style lang="scss">
-.device-usage-detail-dialog {
-  :deep(.el-dialog) {
-    margin-top: 8vh !important;
-    max-height: 84vh;
-    transition: all 0.3s ease;
-  }
+.el-dialog.device-usage-detail-dialog {
+  margin-top: 8vh !important;
+  max-height: 84vh !important;
+  height: 84vh !important;
+  transition: all 0.3s ease;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   
-  :deep(.el-dialog.maximized) {
-    margin-top: 1vh !important;
-    max-height: 98vh;
+  .el-dialog__body {
+    height: 0 !important;
   }
+}
+
+.el-dialog.device-usage-detail-dialog.maximized {
+  margin-top: 1vh !important;
+  max-height: 98vh !important;
+  height: 98vh !important;
+  min-height: 98vh !important;
   
-  :deep(.el-dialog__header) {
+  .el-dialog__body {
+    height: 0 !important;
+  }
+}
+
+.el-dialog.device-usage-detail-dialog {
+  .el-dialog__header {
     margin-bottom: 0 !important;
     padding: 12px 20px !important;
     border-bottom: 1px solid var(--theme-border);
+    flex-shrink: 0;
   }
   
-  :deep(.el-dialog__title) {
+  .el-dialog__title {
     margin-bottom: 0 !important;
     padding-bottom: 0 !important;
   }
   
-  :deep(.el-dialog__body) {
-    padding: 20px;
+  .el-dialog__body {
+    padding: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
   }
   
   .dialog-header {
@@ -593,8 +622,9 @@ watch(() => props.deviceId, (newVal) => {
   .dialog-content {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    margin-top: 16px;
+    height: 100%;
+    padding: 16px;
+    overflow: hidden;
   }
 
   .date-range-selector {
@@ -657,6 +687,8 @@ watch(() => props.deviceId, (newVal) => {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(3, 1fr);
     gap: 16px;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
 
@@ -667,7 +699,7 @@ watch(() => props.deviceId, (newVal) => {
     border: 1px solid var(--theme-border);
     border-radius: 12px;
     overflow: hidden;
-    min-height: 220px;
+    min-height: 0;
 
     .chart-header {
       padding: 12px 16px;
@@ -685,7 +717,7 @@ watch(() => props.deviceId, (newVal) => {
 
     .chart-wrapper {
       flex: 1;
-      min-height: 180px;
+      min-height: 0;
       width: 100%;
 
       :deep(.echarts) {

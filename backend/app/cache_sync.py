@@ -229,32 +229,41 @@ class CacheSyncService:
             return 0
         
         try:
-            remote_dicts = self.db.query(SysDictData).filter(
-                SysDictData.dict_type == self.PURPOSE_DICT_TYPE,
-                SysDictData.deleted == 0,
-                SysDictData.status == 1
-            ).order_by(SysDictData.dict_sort).all()
+            # 检查本地数据库是否已有字典数据
+            existing_dicts = self.local_db.query(LocalPurposeDict).filter(
+                LocalPurposeDict.dict_type == self.PURPOSE_DICT_TYPE,
+                LocalPurposeDict.deleted == 0,
+                LocalPurposeDict.status == 1
+            ).count()
             
-            self.local_db.query(LocalPurposeDict).filter(
-                LocalPurposeDict.dict_type == self.PURPOSE_DICT_TYPE
-            ).delete()
-            
-            for d in remote_dicts:
-                local_dict = LocalPurposeDict(
-                    id=d.id,
-                    dict_type=d.dict_type,
-                    dict_label=d.dict_label,
-                    dict_value=d.dict_value,
-                    dict_sort=d.dict_sort,
-                    status=d.status,
-                    remark=d.remark,
-                    deleted=d.deleted
-                )
-                self.local_db.add(local_dict)
-            
-            self.local_db.commit()
-            self._update_metadata('purpose_dict', 'success', len(remote_dicts))
-            return len(remote_dicts)
+            # 如果本地数据库没有字典数据，初始化默认数据
+            if existing_dicts == 0:
+                default_dicts = [
+                    {'id': 1, 'dict_label': '训练', 'dict_value': 1, 'dict_sort': 1},
+                    {'id': 2, 'dict_label': '研发', 'dict_value': 2, 'dict_sort': 2},
+                    {'id': 3, 'dict_label': '推理', 'dict_value': 3, 'dict_sort': 3}
+                ]
+                
+                for d in default_dicts:
+                    local_dict = LocalPurposeDict(
+                        id=d['id'],
+                        dict_type=self.PURPOSE_DICT_TYPE,
+                        dict_label=d['dict_label'],
+                        dict_value=d['dict_value'],
+                        dict_sort=d['dict_sort'],
+                        status=1,
+                        remark=f'GPU设备用途-{d["dict_label"]}',
+                        deleted=0
+                    )
+                    self.local_db.add(local_dict)
+                
+                self.local_db.commit()
+                self._update_metadata('purpose_dict', 'success', len(default_dicts))
+                return len(default_dicts)
+            else:
+                # 本地已有数据，直接更新元数据
+                self._update_metadata('purpose_dict', 'success', existing_dicts)
+                return existing_dicts
         except Exception as e:
             self.local_db.rollback()
             self._update_metadata('purpose_dict', 'error', 0, str(e))

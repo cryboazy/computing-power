@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.local_database import get_local_db
-from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats
+from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict
 from app.aggregator import DataAggregator
 from app.database import SessionLocal
 
@@ -198,7 +198,7 @@ def update_system_config(request: ConfigUpdateRequest, db: Session = Depends(get
 
 
 @router.get("/aggregation/refresh")
-async def refresh_aggregation(days: int = 1, db: Session = Depends(get_local_db)):
+async def refresh_aggregation(days: int = 1, target_date_str: Optional[str] = None, db: Session = Depends(get_local_db)):
     if days < 1 or days > 365:
         raise HTTPException(status_code=400, detail="天数必须在1-365之间")
     
@@ -206,22 +206,36 @@ async def refresh_aggregation(days: int = 1, db: Session = Depends(get_local_db)
         main_db = SessionLocal()
         try:
             aggregator = DataAggregator(main_db, db)
-            total_steps = days * 5
+            
+            target_dates = []
+            if target_date_str:
+                try:
+                    single_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+                    target_dates = [single_date]
+                except ValueError:
+                    yield f"data: {json.dumps({'type': 'error', 'success': False, 'message': '日期格式错误，请使用YYYY-MM-DD格式'})}\n\n"
+                    return
+            else:
+                for i in range(days):
+                    dt = date.today() - timedelta(days=i+1)
+                    target_dates.append(dt)
+            
+            total_steps = len(target_dates) * 6
             current_step = 0
             
-            yield f"data: {json.dumps({'type': 'start', 'total_steps': total_steps, 'days': days})}\n\n"
+            yield f"data: {json.dumps({'type': 'start', 'total_steps': total_steps, 'days': len(target_dates)})}\n\n"
             await asyncio.sleep(0)
             
-            for i in range(days):
-                target_date = date.today() - timedelta(days=i+1)
-                date_str = target_date.strftime("%Y-%m-%d")
+            for i, dt in enumerate(target_dates):
+                date_str = dt.strftime("%Y-%m-%d")
                 
-                yield f"data: {json.dumps({'type': 'day_start', 'day': i+1, 'total_days': days, 'date': date_str})}\n\n"
+                yield f"data: {json.dumps({'type': 'day_start', 'day': i+1, 'total_days': len(target_dates), 'date': date_str})}\n\n"
                 await asyncio.sleep(0)
                 
                 steps = [
                     ('daily_summary', '日汇总'),
                     ('device_summary', '设备汇总'),
+                    ('device_hourly', '设备小时数据'),
                     ('org_summary', '组织汇总'),
                     ('statistics', '统计数据'),
                     ('org_hourly', '组织小时数据')
@@ -234,19 +248,21 @@ async def refresh_aggregation(days: int = 1, db: Session = Depends(get_local_db)
                     await asyncio.sleep(0)
                     
                     if step_name == 'daily_summary':
-                        aggregator.aggregate_daily_summary(target_date)
+                        aggregator.aggregate_daily_summary(dt)
                     elif step_name == 'device_summary':
-                        aggregator.aggregate_device_summary(target_date)
+                        aggregator.aggregate_device_summary(dt)
+                    elif step_name == 'device_hourly':
+                        aggregator.aggregate_device_hourly_stats(dt)
                     elif step_name == 'org_summary':
-                        aggregator.aggregate_org_summary(target_date)
+                        aggregator.aggregate_org_summary(dt)
                     elif step_name == 'statistics':
-                        aggregator.aggregate_statistics_data(target_date)
+                        aggregator.aggregate_statistics_data(dt)
                     elif step_name == 'org_hourly':
-                        aggregator.aggregate_org_hourly_stats(target_date)
+                        aggregator.aggregate_org_hourly_stats(dt)
                     
                     await asyncio.sleep(0)
             
-            yield f"data: {json.dumps({'type': 'complete', 'success': True, 'message': f'成功刷新 {days} 天的聚合数据'})}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'success': True, 'message': f'成功刷新 {len(target_dates)} 天的聚合数据'})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'success': False, 'message': f'刷新失败: {str(e)}'})}\n\n"
         finally:
@@ -306,3 +322,153 @@ def get_aggregation_status(db: Session = Depends(get_local_db)):
         "org_hourly_count": org_hourly_count,
         "latest_aggregation_time": latest_time
     }
+
+
+class PurposeDictRequest(BaseModel):
+    dict_label: str
+    dict_value: int
+    dict_sort: int = 0
+    status: int = 1
+    remark: str = ""
+
+
+class PurposeStatusRequest(BaseModel):
+    status: int
+
+
+@router.post("/dict/purpose")
+def create_purpose(request: PurposeDictRequest, db: Session = Depends(get_local_db)):
+    # 检查dict_value是否已存在
+    existing = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.dict_type == "device_purpose",
+        LocalPurposeDict.dict_value == request.dict_value
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="设备用途值已存在")
+    
+    # 检查dict_label是否已存在
+    existing_label = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.dict_type == "device_purpose",
+        LocalPurposeDict.dict_label == request.dict_label
+    ).first()
+    
+    if existing_label:
+        raise HTTPException(status_code=400, detail="设备用途标签已存在")
+    
+    # 获取最大ID
+    max_id = db.query(func.max(LocalPurposeDict.id)).scalar() or 0
+    
+    purpose = LocalPurposeDict(
+        id=max_id + 1,
+        dict_type="device_purpose",
+        dict_label=request.dict_label,
+        dict_value=request.dict_value,
+        dict_sort=request.dict_sort,
+        status=request.status,
+        remark=request.remark,
+        deleted=0
+    )
+    
+    db.add(purpose)
+    db.commit()
+    db.refresh(purpose)
+    
+    return {"success": True, "message": "设备用途添加成功", "data": {
+        "id": purpose.id,
+        "dict_label": purpose.dict_label,
+        "dict_value": purpose.dict_value,
+        "dict_sort": purpose.dict_sort,
+        "status": purpose.status,
+        "remark": purpose.remark
+    }}
+
+
+@router.put("/dict/purpose/{purpose_id}")
+def update_purpose(purpose_id: int, request: PurposeDictRequest, db: Session = Depends(get_local_db)):
+    purpose = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.id == purpose_id,
+        LocalPurposeDict.dict_type == "device_purpose"
+    ).first()
+    
+    if not purpose:
+        raise HTTPException(status_code=404, detail="设备用途不存在")
+    
+    # 检查dict_value是否已被其他记录使用
+    existing = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.dict_type == "device_purpose",
+        LocalPurposeDict.dict_value == request.dict_value,
+        LocalPurposeDict.id != purpose_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="设备用途值已存在")
+    
+    # 检查dict_label是否已被其他记录使用
+    existing_label = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.dict_type == "device_purpose",
+        LocalPurposeDict.dict_label == request.dict_label,
+        LocalPurposeDict.id != purpose_id
+    ).first()
+    
+    if existing_label:
+        raise HTTPException(status_code=400, detail="设备用途标签已存在")
+    
+    purpose.dict_label = request.dict_label
+    purpose.dict_value = request.dict_value
+    purpose.dict_sort = request.dict_sort
+    purpose.status = request.status
+    purpose.remark = request.remark
+    purpose.update_time = datetime.now()
+    
+    db.commit()
+    db.refresh(purpose)
+    
+    return {"success": True, "message": "设备用途更新成功", "data": {
+        "id": purpose.id,
+        "dict_label": purpose.dict_label,
+        "dict_value": purpose.dict_value,
+        "dict_sort": purpose.dict_sort,
+        "status": purpose.status,
+        "remark": purpose.remark
+    }}
+
+
+@router.patch("/dict/purpose/{purpose_id}/status")
+def update_purpose_status(purpose_id: int, request: PurposeStatusRequest, db: Session = Depends(get_local_db)):
+    purpose = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.id == purpose_id,
+        LocalPurposeDict.dict_type == "device_purpose"
+    ).first()
+    
+    if not purpose:
+        raise HTTPException(status_code=404, detail="设备用途不存在")
+    
+    if request.status not in [0, 1]:
+        raise HTTPException(status_code=400, detail="状态值必须为0或1")
+    
+    purpose.status = request.status
+    purpose.update_time = datetime.now()
+    
+    db.commit()
+    
+    return {"success": True, "message": "状态更新成功"}
+
+
+@router.delete("/dict/purpose/{purpose_id}")
+def delete_purpose(purpose_id: int, db: Session = Depends(get_local_db)):
+    purpose = db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.id == purpose_id,
+        LocalPurposeDict.dict_type == "device_purpose"
+    ).first()
+    
+    if not purpose:
+        raise HTTPException(status_code=404, detail="设备用途不存在")
+    
+    # 软删除
+    purpose.deleted = 1
+    purpose.update_time = datetime.now()
+    
+    db.commit()
+    
+    return {"success": True, "message": "设备用途删除成功"}

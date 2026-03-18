@@ -17,7 +17,25 @@
           <span class="decoration-line"></span>
           <span class="decoration-dot"></span>
         </div>
-        <h3 class="dialog-title">{{ orgName || '组织机构详情' }}</h3>
+        <div class="header-title-group">
+          <h3 class="dialog-title">{{ orgName || '组织机构详情' }}</h3>
+          <div class="header-subtitle">
+            <span class="subtitle-item">
+              <span class="subtitle-label">统计范围：</span>
+              <span class="subtitle-value">{{ orgScopeLabel }}</span>
+            </span>
+            <span class="subtitle-divider">|</span>
+            <span class="subtitle-item">
+              <span class="subtitle-label">时间区间：</span>
+              <span class="subtitle-value">{{ timeRangeLabel }}</span>
+            </span>
+            <span class="subtitle-divider">|</span>
+            <span class="subtitle-item">
+              <span class="subtitle-label">时段类型：</span>
+              <span class="subtitle-value">{{ timeTypeLabel }}</span>
+            </span>
+          </div>
+        </div>
         <div class="header-decoration right">
           <span class="decoration-dot"></span>
           <span class="decoration-line"></span>
@@ -159,6 +177,14 @@ const props = defineProps({
   initialTab: {
     type: String,
     default: 'devices'
+  },
+  timeRange: {
+    type: String,
+    default: 'month'
+  },
+  timeType: {
+    type: String,
+    default: 'work'
   }
 })
 
@@ -168,6 +194,30 @@ const dialogVisible = computed({
   get: () => props.visible,
   set: (val) => emit('update:visible', val)
 })
+
+const TIME_RANGE_LABELS = {
+  'month': '近一个月',
+  'quarter': '近三个月',
+  'half_year': '近六个月',
+  'year': '近一年'
+}
+
+const TIME_TYPE_LABELS = {
+  'work': '工作时间(9:00-18:00)',
+  'nonwork': '非工作时间',
+  'all': '全天'
+}
+
+const TIME_RANGE_DAYS = {
+  'month': 30,
+  'quarter': 90,
+  'half_year': 180,
+  'year': 365
+}
+
+const timeRangeLabel = computed(() => TIME_RANGE_LABELS[props.timeRange] || '近一个月')
+const timeTypeLabel = computed(() => TIME_TYPE_LABELS[props.timeType] || '工作时间')
+const orgScopeLabel = computed(() => orgName.value || '全部组织')
 
 const activeTab = ref(props.initialTab)
 const isMaximized = ref(false)
@@ -183,6 +233,13 @@ const formatDate = (date) => {
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+const getDateRangeFromTimeRange = (timeRange) => {
+  const days = TIME_RANGE_DAYS[timeRange] || 30
+  const now = new Date()
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+  return [formatDate(startDate), formatDate(now)]
 }
 
 const getDateRange = (type) => {
@@ -207,7 +264,7 @@ const getDateRange = (type) => {
   return [formatDate(startDate), formatDate(now)]
 }
 
-const dateRange = ref(getDateRange('3m'))
+const dateRange = ref(getDateRangeFromTimeRange(props.timeRange))
 const selectedPurpose = ref(null)
 const purposeList = ref([])
 
@@ -260,7 +317,7 @@ const fetchData = async () => {
   
   try {
     console.log('[OrgDetailDialog] Calling API...')
-    const data = await dashboardApi.getOrgDetail(props.orgId)
+    const data = await dashboardApi.getOrgDetail(props.orgId, props.timeRange, props.timeType)
     console.log('[OrgDetailDialog] API response:', data)
     if (data.error) {
       console.log('[OrgDetailDialog] API returned error:', data.error)
@@ -303,6 +360,19 @@ watch(() => props.visible, (newVal) => {
     } else {
       activeTab.value = 'devices'
     }
+    fetchData()
+  }
+})
+
+watch(() => props.timeType, (newVal) => {
+  if (dialogVisible.value && props.orgId) {
+    fetchData()
+  }
+})
+
+watch(() => props.timeRange, (newTimeRange) => {
+  dateRange.value = getDateRangeFromTimeRange(newTimeRange)
+  if (dialogVisible.value && props.orgId) {
     fetchData()
   }
 })
@@ -384,9 +454,8 @@ watch(() => props.initialTab, (newVal) => {
   }
   
   .dialog-title {
-    flex: 1;
     text-align: center;
-    margin: 0 20px;
+    margin: 0;
     font-size: 20px;
     font-weight: 600;
     background: linear-gradient(90deg, var(--theme-primary) 0%, var(--theme-secondary) 50%, var(--theme-primary) 100%);
@@ -398,6 +467,42 @@ watch(() => props.initialTab, (newVal) => {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  
+  .header-title-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin: 0 20px;
+  }
+  
+  .header-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--theme-text-secondary);
+    
+    .subtitle-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    .subtitle-label {
+      color: var(--theme-text-muted);
+    }
+    
+    .subtitle-value {
+      color: var(--theme-primary);
+      font-weight: 500;
+    }
+    
+    .subtitle-divider {
+      color: var(--theme-border);
+    }
   }
   
   .window-controls {

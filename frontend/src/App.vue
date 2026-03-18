@@ -134,7 +134,7 @@
     
     <el-dialog
       v-model="adminPanelVisible"
-      width="600px"
+      width="800px"
       top="5vh"
       :close-on-click-modal="false"
       class="admin-dialog"
@@ -166,6 +166,8 @@
       v-model:visible="orgDetailVisible"
       :org-id="currentOrgId"
       :initial-tab="currentOrgActiveTab"
+      :time-range="globalTimeRange"
+      :time-type="timeType"
     />
   </div>
 </template>
@@ -454,7 +456,7 @@ onUnmounted(() => {
   overflow: hidden;
   
   .left-panel, .right-panel {
-    width: 340px;
+    width: 350px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
