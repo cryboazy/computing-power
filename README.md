@@ -11,25 +11,37 @@ computing-power/
 │   │   ├── config.py       # 配置管理
 │   │   ├── database.py     # PostgreSQL 数据库连接
 │   │   ├── local_database.py # SQLite 本地数据库
-│   │   ├── api.py          # API 路由
+│   │   ├── local_models.py  # SQLite 数据模型
+│   │   ├── api_cached.py   # API 路由 (缓存版)
+│   │   ├── admin.py        # 管理后台 API
+│   │   ├── aggregator.py   # 数据聚合服务
+│   │   ├── cache_sync.py   # 缓存同步服务
+│   │   ├── models.py       # PostgreSQL 数据模型
 │   │   └── ...
 │   ├── data/               # 数据存储目录
+│   ├── sql/                # SQL 脚本
+│   │   ├── sys_dict_data.sql
+│   │   └── system_config.sql
 │   ├── main.py             # 应用入口
 │   ├── requirements.txt    # Python 依赖
 │   └── Dockerfile          # 后端容器配置
 ├── frontend/               # 前端服务 (Vue 3)
 │   ├── src/
-│   │   ├── components/     # Vue 组件
-│   │   ├── api/            # API 调用
-│   │   └── ...
-│   ├── package.json        # Node 依赖
-│   ├── Dockerfile          # 前端容器配置
-│   └── nginx.conf          # Nginx 配置
-├── docker/                  # Docker 配置
-│   └── daemon.json         # Docker 镜像加速配置
+│   │   ├── components/    # Vue 组件
+│   │   ├── api/           # API 调用
+│   │   ├── composables/    # 组合式函数
+│   │   ├── styles/         # 全局样式
+│   │   └── themes/        # 主题配置
+│   ├── public/             # 静态资源
+│   ├── package.json       # Node 依赖
+│   ├── Dockerfile         # 前端容器配置
+│   ├── nginx.conf         # Nginx 配置
+│   └── vite.config.js     # Vite 配置
+├── docker/                 # Docker 配置
+│   └── daemon.json        # Docker 镜像加速配置
 ├── docker-compose.yml      # Docker 编排配置
 ├── .env.example            # 环境变量模板
-└── .gitignore              # Git 忽略文件
+└── .gitignore             # Git 忽略文件
 ```
 
 ## 技术栈

@@ -361,10 +361,13 @@ const getPurposeText = (purpose) => {
 
 const getPurposeTagStyle = (purpose) => {
   const colors = getAllColors()
-  const chartColors = [colors.primary, colors.warning, colors.success, colors.chart1, colors.chart2, colors.chart3, colors.chart4]
+  const chartColors = [colors.primary, colors.warning, colors.success, colors.chart1, colors.chart2, colors.chart3]
   const index = purposeDict.value.findIndex(p => p.value === purpose)
-  const color = index >= 0 ? chartColors[index % chartColors.length] : colors.info
-  return { backgroundColor: color + '20', borderColor: color, color: color }
+  if (index >= 0) {
+    const color = chartColors[index % chartColors.length]
+    return { backgroundColor: color + '20', borderColor: color, color: color }
+  }
+  return { backgroundColor: colors.info + '20', borderColor: colors.info, color: colors.info }
 }
 
 const getNetworkTagColor = () => {
@@ -616,10 +619,10 @@ watch(() => props.orgId, (newVal) => {
 })
 
 onMounted(() => {
-  fetchPurposeDict()
   if (props.orgId) {
     fetchDistributionData()
   }
+  fetchPurposeDict()
 })
 </script>
 
@@ -785,6 +788,7 @@ onMounted(() => {
     
     .el-table__row:hover td {
       background: var(--theme-hover-bg) !important;
+      cursor: pointer;
     }
     
     tr.el-table__row--striped td {

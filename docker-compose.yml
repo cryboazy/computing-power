@@ -1,27 +1,4 @@
-version: '3.8'
-
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: computing-power-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-computing_power}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    networks:
-      - computing-power-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-computing_power}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
   backend:
     build:
       context: ./backend
@@ -31,8 +8,8 @@ services:
     ports:
       - "${BACKEND_PORT:-8001}:8001"
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
+      - DB_HOST=host.docker.internal
+      - DB_PORT=${DB_PORT:-5432}
       - DB_NAME=${DB_NAME:-computing_power}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
@@ -45,9 +22,6 @@ services:
       - backend-data:/app/data
     networks:
       - computing-power-network
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
       interval: 30s
@@ -59,8 +33,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        - VITE_API_BASE_URL=http://localhost:${BACKEND_PORT:-8001}
     container_name: computing-power-frontend
     restart: unless-stopped
     ports:
@@ -75,7 +47,5 @@ networks:
     driver: bridge
 
 volumes:
-  postgres-data:
-    driver: local
   backend-data:
     driver: local

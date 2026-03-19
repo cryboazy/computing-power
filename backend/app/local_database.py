@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, text, event
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -36,36 +36,6 @@ LocalSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=local_e
 LocalBase = declarative_base()
 
 
-def migrate_add_columns():
-    with local_engine.connect() as conn:
-        try:
-            conn.execute(text("ALTER TABLE daily_gpu_usage_summary ADD COLUMN avg_gpu_usage_rate_work NUMERIC(5, 2) DEFAULT 0.00"))
-        except Exception:
-            pass
-        
-        try:
-            conn.execute(text("ALTER TABLE daily_gpu_usage_summary ADD COLUMN avg_gpu_usage_rate_nonwork NUMERIC(5, 2) DEFAULT 0.00"))
-        except Exception:
-            pass
-        
-        try:
-            conn.execute(text("ALTER TABLE org_gpu_usage_summary ADD COLUMN avg_gpu_usage_rate_work NUMERIC(5, 2) DEFAULT 0.00"))
-        except Exception:
-            pass
-        
-        try:
-            conn.execute(text("ALTER TABLE org_gpu_usage_summary ADD COLUMN avg_gpu_usage_rate_nonwork NUMERIC(5, 2) DEFAULT 0.00"))
-        except Exception:
-            pass
-        
-        try:
-            conn.execute(text("ALTER TABLE statistics_data ADD COLUMN is_work_hour SMALLINT DEFAULT 1"))
-        except Exception:
-            pass
-        
-        conn.commit()
-
-
 def init_local_db():
     import hashlib
     from app.local_models import (
@@ -75,7 +45,6 @@ def init_local_db():
         LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict
     )
     LocalBase.metadata.create_all(bind=local_engine)
-    migrate_add_columns()
     print("本地数据库表创建完成")
     
     db = LocalSessionLocal()
