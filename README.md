@@ -546,3 +546,7 @@ FRONTEND_PORT=5174
 ## 许可证
 
 MIT License
+
+## 更新日志
+
+详见 [CHANGELOG.md](CHANGELOG.md)

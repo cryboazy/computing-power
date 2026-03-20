@@ -59,6 +59,33 @@
           <div class="stat-label">平均使用率</div>
         </div>
       </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value" :title="`显存已用量: ${formatNumber(orgDetail?.memory_used_gb || 0)} GB`">{{ orgDetail?.memory_usage_rate || 0 }} <span class="unit">%</span></div>
+          <div class="stat-label">显存使用率</div>
+        </div>
+      </div>
+      
+      <div class="stat-card">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 20V10"></path>
+            <path d="M12 20V4"></path>
+            <path d="M6 20v-6"></path>
+          </svg>
+        </div>
+        <div class="stat-content">
+          <div class="stat-value">{{ orgDetail?.avg_memory_utilization || 0 }} <span class="unit">%</span></div>
+          <div class="stat-label">显存利用率</div>
+        </div>
+      </div>
     </div>
     
     <div v-if="distributionLoading" class="distribution-loading">
@@ -106,7 +133,7 @@
       </div>
       
       <el-table
-        :data="filteredDevices"
+        :data="paginatedDevices"
         stripe
         border
         v-loading="tableLoading"
@@ -177,21 +204,6 @@
           align="center"
         />
         <el-table-column
-          prop="usage_rate"
-          label="最近使用率(%)"
-          width="140"
-          sortable
-          align="center"
-        >
-          <template #default="{ row }">
-            <el-progress 
-              :percentage="Math.min(100, Math.round(row.usage_rate))" 
-              :color="getUsageColor(row.usage_rate)"
-              :stroke-width="8"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column
           prop="net_module_name"
           label="运行网络"
           width="120"
@@ -216,6 +228,53 @@
             <el-tag :style="getPurposeTagStyle(row.purpose)" size="small">
               {{ getPurposeText(row.purpose) }}
             </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="usage_rate"
+          label="最近使用率(%)"
+          width="140"
+          sortable
+          align="center"
+        >
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="Math.min(100, Math.round(row.usage_rate))" 
+              :color="getUsageColor(row.usage_rate)"
+              :stroke-width="8"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="memory_usage_rate"
+          label="显存使用率(%)"
+          width="140"
+          sortable
+          align="center"
+        >
+          <template #default="{ row }">
+            <el-tooltip :content="`显存已用量: ${row.memory_used_gb || 0} GB`" placement="top">
+              <el-progress 
+                :percentage="Math.min(100, Math.round(row.memory_usage_rate))" 
+                :color="getUsageColor(row.memory_usage_rate)"
+                :stroke-width="8"
+              />
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="memory_utilization"
+          label="显存利用率(%)"
+          width="140"
+          sortable
+          align="center"
+        >
+          <template #default="{ row }">
+            <el-progress 
+              :percentage="Math.min(100, Math.round(row.memory_utilization))" 
+              :color="getUsageColor(row.memory_utilization)"
+              :stroke-width="8"
+            />
           </template>
         </el-table-column>
         <el-table-column
@@ -458,6 +517,15 @@ const getChartColors = () => {
     colors.danger,
     colors.info
   ]
+}
+
+const formatNumber = (num, decimals = 0) => {
+  if (num === null || num === undefined || isNaN(num)) return '0'
+  const n = Number(num)
+  if (decimals > 0) {
+    return n.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  }
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
 const createPieOption = (data) => {

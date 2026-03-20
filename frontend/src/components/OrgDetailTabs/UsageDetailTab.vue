@@ -75,8 +75,9 @@ const props = defineProps({
     default: null
   },
   purpose: {
-    type: Number,
-    default: null
+    type: [Number, String],
+    default: null,
+    validator: (val) => val === null || val === '' || typeof val === 'number'
   }
 })
 
@@ -135,9 +136,7 @@ const initializeEmptyOptions = () => {
 initializeEmptyOptions()
 
 const fetchData = async () => {
-  console.log('[UsageDetailTab] fetchData called with orgId:', props.orgId, 'dateRange:', props.dateRange, 'purpose:', props.purpose)
   if (!props.orgId) {
-    console.log('[UsageDetailTab] No orgId provided')
     return
   }
   
@@ -158,14 +157,12 @@ const fetchData = async () => {
       apiParams.purpose = props.purpose
     }
     
-    console.log('[UsageDetailTab] Calling API for all time types')
     const [dataAll, dataWork, dataNonwork] = await Promise.all([
       dashboardApi.getOrgUsageTrend(props.orgId, 'all', startDate, endDate, props.purpose),
       dashboardApi.getOrgUsageTrend(props.orgId, 'work', startDate, endDate, props.purpose),
       dashboardApi.getOrgUsageTrend(props.orgId, 'nonwork', startDate, endDate, props.purpose)
     ])
     
-    console.log('[UsageDetailTab] API responses received')
     usageDataAll.value = dataAll
     usageDataWork.value = dataWork
     usageDataNonwork.value = dataNonwork
@@ -173,7 +170,6 @@ const fetchData = async () => {
     await nextTick()
     updateChartOptions()
     dataLoaded.value = true
-    console.log('[UsageDetailTab] dataLoaded set to true')
   } catch (error) {
     console.error('[UsageDetailTab] Failed to fetch usage trend:', error)
     console.error('[UsageDetailTab] Error details:', error.response?.data || error.message)
@@ -190,17 +186,15 @@ const updateChartOptions = () => {
   const dailyData = usageDataAll.value?.daily || []
   const hourlyData = usageDataAll.value?.hourly || []
   
-  console.log('[UsageDetailTab] updateChartOptions called')
-  
   const months = [...new Set([
     ...monthlyDataAll.map(d => d.month),
     ...monthlyDataWork.map(d => d.month),
     ...monthlyDataNonwork.map(d => d.month)
   ])].sort()
   
-  const getDataByMonth = (data, month) => {
+  const getDataByMonth = (data, month, field = 'avg_usage') => {
     const item = data.find(d => d.month === month)
-    return item ? item.avg_usage : null
+    return item ? item[field] : null
   }
   
   monthlyOption.value = {
@@ -208,18 +202,30 @@ const updateChartOptions = () => {
       trigger: 'axis',
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
-      textStyle: { color: colors.text }
+      textStyle: { color: colors.text },
+      formatter: (params) => {
+        const month = params[0].axisValue
+        let html = `${month}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined && p.value !== '') {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
+      }
     },
     legend: {
-      data: ['工作时间', '非工作时间', '全天'],
+      data: ['工作时间-GPU', '非工作时间-GPU', '全天-GPU', '工作时间-显存', '非工作时间-显存', '全天-显存'],
       textStyle: { color: colors.textSecondary },
-      top: 0
+      top: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
-      top: '15%',
+      top: '18%',
       containLabel: true
     },
     xAxis: {
@@ -238,25 +244,52 @@ const updateChartOptions = () => {
     },
     series: [
       {
-        name: '工作时间',
+        name: '工作时间-GPU',
         type: 'bar',
-        data: months.map(m => getDataByMonth(monthlyDataWork, m)),
-        itemStyle: { color: colors.chart1, borderRadius: [4, 4, 0, 0] },
-        label: { show: true, position: 'top', formatter: '{c}%', color: colors.textSecondary, fontSize: 10 }
+        data: months.map(m => getDataByMonth(monthlyDataWork, m, 'avg_usage')),
+        itemStyle: { color: colors.chart1, borderRadius: [4, 4, 0, 0] }
       },
       {
-        name: '非工作时间',
+        name: '非工作时间-GPU',
         type: 'bar',
-        data: months.map(m => getDataByMonth(monthlyDataNonwork, m)),
-        itemStyle: { color: colors.chart2, borderRadius: [4, 4, 0, 0] },
-        label: { show: true, position: 'top', formatter: '{c}%', color: colors.textSecondary, fontSize: 10 }
+        data: months.map(m => getDataByMonth(monthlyDataNonwork, m, 'avg_usage')),
+        itemStyle: { color: colors.chart2, borderRadius: [4, 4, 0, 0] }
       },
       {
-        name: '全天',
+        name: '全天-GPU',
         type: 'bar',
-        data: months.map(m => getDataByMonth(monthlyDataAll, m)),
-        itemStyle: { color: colors.chart4, borderRadius: [4, 4, 0, 0] },
-        label: { show: true, position: 'top', formatter: '{c}%', color: colors.textSecondary, fontSize: 10 }
+        data: months.map(m => getDataByMonth(monthlyDataAll, m, 'avg_usage')),
+        itemStyle: { color: colors.chart4, borderRadius: [4, 4, 0, 0] }
+      },
+      {
+        name: '工作时间-显存',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: months.map(m => getDataByMonth(monthlyDataWork, m, 'avg_memory_usage')),
+        lineStyle: { color: colors.chart3, width: 2 },
+        itemStyle: { color: colors.chart3 }
+      },
+      {
+        name: '非工作时间-显存',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: months.map(m => getDataByMonth(monthlyDataNonwork, m, 'avg_memory_usage')),
+        lineStyle: { color: colors.chart5, width: 2 },
+        itemStyle: { color: colors.chart5 }
+      },
+      {
+        name: '全天-显存',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: months.map(m => getDataByMonth(monthlyDataAll, m, 'avg_memory_usage')),
+        lineStyle: { color: colors.chart6, width: 2 },
+        itemStyle: { color: colors.chart6 }
       }
     ]
   }
@@ -268,25 +301,28 @@ const updateChartOptions = () => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        const data = params[0]
-        const usageColor = getUsageColor(data.value)
-        return `${data.axisValue}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span>`
+        const date = params[0].axisValue
+        let html = `${date}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined && p.value !== '') {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
       }
     },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      pieces: [
-        { gt: usageThresholds.value.high, color: colors.usageHigh },
-        { gt: usageThresholds.value.low, lte: usageThresholds.value.high, color: colors.usageMedium },
-        { lte: usageThresholds.value.low, color: colors.usageLow }
-      ]
+    legend: {
+      data: ['GPU使用率', '显存使用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
-      top: '10%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
@@ -303,25 +339,28 @@ const updateChartOptions = () => {
       axisLabel: { color: colors.textSecondary, fontSize: 11 },
       splitLine: { lineStyle: { color: colors.borderLight } }
     },
-    series: [{
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      data: dailyData.map(d => d.avg_usage),
-      lineStyle: { color: colors.chart1, width: 2 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: colors.chart1 + '4D' },
-            { offset: 1, color: colors.chart1 + '0D' }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: dailyData.map(d => d.avg_usage),
+        lineStyle: { color: colors.chart1, width: 2 },
+        itemStyle: { color: colors.chart1 }
       },
-      itemStyle: { color: colors.chart1 }
-    }]
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: dailyData.map(d => d.avg_memory_usage),
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 }
+      }
+    ]
   }
   
   hourlyOption.value = {
@@ -331,25 +370,28 @@ const updateChartOptions = () => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        const data = params[0]
-        const usageColor = getUsageColor(data.value)
-        return `${data.axisValue}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span>`
+        const hour = params[0].axisValue
+        let html = `${hour}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined && p.value !== '') {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
       }
     },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      pieces: [
-        { gt: usageThresholds.value.high, color: colors.usageHigh },
-        { gt: usageThresholds.value.low, lte: usageThresholds.value.high, color: colors.usageMedium },
-        { lte: usageThresholds.value.low, color: colors.usageLow }
-      ]
+    legend: {
+      data: ['GPU使用率', '显存使用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
-      top: '10%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
@@ -366,28 +408,29 @@ const updateChartOptions = () => {
       axisLabel: { color: colors.textSecondary, fontSize: 11 },
       splitLine: { lineStyle: { color: colors.borderLight } }
     },
-    series: [{
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      data: hourlyData.map(d => d.avg_usage),
-      lineStyle: { color: colors.chart2, width: 2 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: colors.chart2 + '4D' },
-            { offset: 1, color: colors.chart2 + '0D' }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: hourlyData.map(d => d.avg_usage),
+        lineStyle: { color: colors.chart1, width: 2 },
+        itemStyle: { color: colors.chart1 }
       },
-      itemStyle: { color: colors.chart2 }
-    }]
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: hourlyData.map(d => d.avg_memory_usage),
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 }
+      }
+    ]
   }
-  
-  console.log('[UsageDetailTab] updateChartOptions completed, monthlyOption:', monthlyOption.value)
 }
 
 watch(() => props.orgId, (newVal) => {

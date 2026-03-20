@@ -60,6 +60,21 @@
                 <span class="status-value">{{ aggregationStatus.latest_aggregation_time || '无' }}</span>
               </div>
             </div>
+            <div class="scheduled-config">
+              <div class="scheduled-config-header">
+                <span class="config-title">定时更新配置</span>
+                <el-switch v-model="config.auto_aggregation_enabled" @change="saveConfig" />
+              </div>
+              <div class="scheduled-config-body" v-if="config.auto_aggregation_enabled">
+                <div class="scheduled-time">
+                  <span class="time-label">每天执行时间:</span>
+                  <el-input-number v-model="config.auto_aggregation_hour" :min="0" :max="23" @change="saveConfig" />
+                  <span class="time-separator">:</span>
+                  <el-input-number v-model="config.auto_aggregation_minute" :min="0" :max="59" @change="saveConfig" />
+                  <span class="time-hint">(时:分)</span>
+                </div>
+              </div>
+            </div>
             <div class="action-buttons">
               <div class="action-row">
                 <el-radio-group v-model="aggregationMode" @change="resetRefreshDays">
@@ -97,6 +112,23 @@
                 </div>
                 <el-progress :percentage="refreshProgress.percent" :stroke-width="12" :show-text="false" />
                 <div class="progress-task">{{ refreshProgress.currentTask }}</div>
+                <el-button v-if="refreshLoading" type="warning" size="small" @click="cancelCurrentTask" style="margin-top: 10px;">
+                  取消任务
+                </el-button>
+              </div>
+              <div v-if="recentTasks.length > 0" class="recent-tasks">
+                <div class="recent-tasks-header">最近任务</div>
+                <div v-for="task in recentTasks" :key="task.task_id" class="recent-task-item">
+                  <div class="task-info">
+                    <span class="task-status" :class="task.status">{{ getStatusText(task.status) }}</span>
+                    <span class="task-time">{{ formatTaskTime(task.create_time) }}</span>
+                  </div>
+                  <div class="task-detail">
+                    <span>{{ task.total_days }}天</span>
+                    <span v-if="task.status === 'completed'">{{ task.progress }}%</span>
+                    <span v-else-if="task.status === 'failed'" class="error-text">{{ task.error_message }}</span>
+                  </div>
+                </div>
               </div>
               <div class="action-row">
                 <el-button type="danger" @click="resetAggregation" :loading="resetLoading">
@@ -166,6 +198,164 @@
           </div>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="数据库状态" name="database">
+        <div class="panel-section">
+          <div class="section-content">
+            <div class="database-header">
+              <el-button type="primary" @click="refreshDatabaseStatus" :loading="dbStatusLoading">
+                刷新状态
+              </el-button>
+              <el-button @click="testDatabaseConnection" :loading="dbTestLoading">
+                测试连接
+              </el-button>
+            </div>
+            
+            <div class="database-section">
+              <div class="section-title">
+                <span class="title-icon main-db"></span>
+                主数据库 (远程)
+                <el-tag :type="dbStatus.main_database?.status === 'connected' ? 'success' : 'danger'" size="small">
+                  {{ dbStatus.main_database?.status === 'connected' ? '已连接' : '未连接' }}
+                </el-tag>
+              </div>
+              <div class="db-info-grid" v-if="dbStatus.main_database">
+                <div class="db-info-item">
+                  <span class="info-label">主机地址</span>
+                  <span class="info-value">{{ dbStatus.main_database.host || '-' }}</span>
+                </div>
+                <div class="db-info-item">
+                  <span class="info-label">端口</span>
+                  <span class="info-value">{{ dbStatus.main_database.port || '-' }}</span>
+                </div>
+                <div class="db-info-item">
+                  <span class="info-label">数据库名</span>
+                  <span class="info-value">{{ dbStatus.main_database.database || '-' }}</span>
+                </div>
+                <div class="db-info-item" v-if="dbStatus.main_database.connection_pool">
+                  <span class="info-label">连接池状态</span>
+                  <span class="info-value">
+                    {{ dbStatus.main_database.connection_pool.checked_out }}/{{ dbStatus.main_database.connection_pool.size }} 使用中
+                    <span class="pool-detail">(溢出: {{ dbStatus.main_database.connection_pool.overflow }})</span>
+                  </span>
+                </div>
+                <div class="db-info-item full-width" v-if="dbStatus.main_database.error">
+                  <span class="info-label error">错误信息</span>
+                  <span class="info-value error">{{ dbStatus.main_database.error }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="database-section">
+              <div class="section-title">
+                <span class="title-icon local-db"></span>
+                本地缓存数据库 (SQLite)
+                <el-tag :type="dbStatus.local_database?.status === 'connected' ? 'success' : 'danger'" size="small">
+                  {{ dbStatus.local_database?.status === 'connected' ? '已连接' : '未连接' }}
+                </el-tag>
+              </div>
+              <div class="db-info-grid" v-if="dbStatus.local_database">
+                <div class="db-info-item">
+                  <span class="info-label">文件路径</span>
+                  <span class="info-value path">{{ dbStatus.local_database.path || '-' }}</span>
+                </div>
+                <div class="db-info-item">
+                  <span class="info-label">文件大小</span>
+                  <span class="info-value">{{ dbStatus.local_database.size_human || '0 Bytes' }}</span>
+                </div>
+                <div class="db-info-item" v-if="dbStatus.local_database.sqlite_info">
+                  <span class="info-label">日志模式</span>
+                  <span class="info-value">{{ dbStatus.local_database.sqlite_info.journal_mode }}</span>
+                </div>
+                <div class="db-info-item" v-if="dbStatus.local_database.sqlite_info">
+                  <span class="info-label">同步模式</span>
+                  <span class="info-value">{{ dbStatus.local_database.sqlite_info.synchronous }}</span>
+                </div>
+                <div class="db-info-item full-width" v-if="dbStatus.local_database.error">
+                  <span class="info-label error">错误信息</span>
+                  <span class="info-value error">{{ dbStatus.local_database.error }}</span>
+                </div>
+              </div>
+              
+              <div class="tables-section" v-if="dbStatus.local_database?.tables">
+                <div class="tables-title">数据表统计</div>
+                <div class="tables-grid">
+                  <div class="table-item" v-for="(table, tableName) in dbStatus.local_database.tables" :key="tableName">
+                    <span class="table-name">{{ table.display_name }}</span>
+                    <span class="table-count">{{ formatNumber(table.count) }} 条</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="database-section" v-if="dbStatus.cache_status && dbStatus.cache_status.length > 0">
+              <div class="section-title">
+                <span class="title-icon cache"></span>
+                缓存同步状态
+              </div>
+              <el-table :data="dbStatus.cache_status" style="width: 100%" border size="small">
+                <el-table-column prop="cache_name" label="缓存名称" width="150" />
+                <el-table-column prop="record_count" label="记录数" width="100">
+                  <template #default="scope">
+                    {{ formatNumber(scope.row.record_count) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="last_sync_time" label="最后同步时间">
+                  <template #default="scope">
+                    {{ scope.row.last_sync_time ? formatDateTime(scope.row.last_sync_time) : '-' }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="status" label="状态" width="100">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.status === 'success' ? 'success' : 'danger'" size="small">
+                      {{ scope.row.status === 'success' ? '成功' : '失败' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="error_message" label="错误信息">
+                  <template #default="scope">
+                    <span v-if="scope.row.error_message" class="error-text">{{ scope.row.error_message }}</span>
+                    <span v-else>-</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+
+            <div class="database-section" v-if="connectionTest.main_database || connectionTest.local_database">
+              <div class="section-title">
+                <span class="title-icon test"></span>
+                连接测试结果
+              </div>
+              <div class="test-results">
+                <div class="test-item" v-if="connectionTest.main_database">
+                  <span class="test-label">主数据库</span>
+                  <el-tag :type="connectionTest.main_database.success ? 'success' : 'danger'" size="small">
+                    {{ connectionTest.main_database.success ? '连接成功' : '连接失败' }}
+                  </el-tag>
+                  <span v-if="connectionTest.main_database.latency_ms" class="latency">
+                    延迟: {{ connectionTest.main_database.latency_ms }} ms
+                  </span>
+                  <span v-if="connectionTest.main_database.error" class="error-text">
+                    {{ connectionTest.main_database.error }}
+                  </span>
+                </div>
+                <div class="test-item" v-if="connectionTest.local_database">
+                  <span class="test-label">本地数据库</span>
+                  <el-tag :type="connectionTest.local_database.success ? 'success' : 'danger'" size="small">
+                    {{ connectionTest.local_database.success ? '连接成功' : '连接失败' }}
+                  </el-tag>
+                  <span v-if="connectionTest.local_database.latency_ms" class="latency">
+                    延迟: {{ connectionTest.local_database.latency_ms }} ms
+                  </span>
+                  <span v-if="connectionTest.local_database.error" class="error-text">
+                    {{ connectionTest.local_database.error }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 添加/编辑设备用途对话框 -->
@@ -229,7 +419,10 @@ const config = ref({
   work_hour_start: 9,
   work_hour_end: 18,
   high_usage_threshold: 60.0,
-  low_usage_threshold: 30.0
+  low_usage_threshold: 30.0,
+  auto_aggregation_enabled: true,
+  auto_aggregation_hour: 1,
+  auto_aggregation_minute: 0
 })
 
 const aggregationStatus = ref({
@@ -259,6 +452,9 @@ const refreshProgress = ref({
   day: 0,
   totalDays: 0
 })
+const currentTaskId = ref(null)
+const pollInterval = ref(null)
+const recentTasks = ref([])
 
 // 时间段聚合相关
 const aggregationMode = ref('days') // 'days' 或 'dateRange'
@@ -282,6 +478,18 @@ const purposeForm = ref({
   remark: ''
 })
 const purposeLoading = ref(false)
+
+const dbStatus = ref({
+  main_database: null,
+  local_database: null,
+  cache_status: []
+})
+const dbStatusLoading = ref(false)
+const dbTestLoading = ref(false)
+const connectionTest = ref({
+  main_database: null,
+  local_database: null
+})
 
 const loadConfig = async () => {
   try {
@@ -334,48 +542,109 @@ const refreshAggregation = async () => {
     refreshProgress.value = {
       show: true,
       percent: 0,
-      currentTask: '正在初始化...',
+      currentTask: '正在创建任务...',
       day: 0,
       totalDays: refreshDays.value
     }
 
-    const eventSource = new EventSource(`/api/admin/aggregation/refresh?days=${refreshDays.value}`)
+    const response = await axios.post('/api/admin/aggregation/tasks', {
+      days: refreshDays.value
+    })
 
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-
-      if (data.type === 'start') {
-        refreshProgress.value.totalDays = data.days
-      } else if (data.type === 'day_start') {
-        refreshProgress.value.day = data.day
-        refreshProgress.value.currentTask = `处理 ${data.date}`
-      } else if (data.type === 'progress') {
-        refreshProgress.value.percent = data.progress
-        refreshProgress.value.currentTask = data.current_task
-      } else if (data.type === 'complete') {
-        eventSource.close()
-        refreshLoading.value = false
-        refreshProgress.value.show = false
-        ElMessage.success(data.message)
-        loadAggregationStatus()
-      } else if (data.type === 'error') {
-        eventSource.close()
-        refreshLoading.value = false
-        refreshProgress.value.show = false
-        ElMessage.error(data.message)
-      }
-    }
-
-    eventSource.onerror = () => {
-      eventSource.close()
+    if (response.data.success) {
+      currentTaskId.value = response.data.task_id
+      startPolling()
+    } else {
       refreshLoading.value = false
       refreshProgress.value.show = false
-      ElMessage.error('连接服务器失败')
+      ElMessage.error(response.data.message || '创建任务失败')
     }
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('刷新失败')
+      refreshLoading.value = false
+      refreshProgress.value.show = false
+      ElMessage.error(error.response?.data?.detail || '刷新失败')
     }
+  }
+}
+
+const startPolling = () => {
+  if (pollInterval.value) {
+    clearInterval(pollInterval.value)
+  }
+  
+  pollInterval.value = setInterval(async () => {
+    if (!currentTaskId.value) {
+      clearInterval(pollInterval.value)
+      return
+    }
+    
+    try {
+      const response = await axios.get(`/api/admin/aggregation/tasks/${currentTaskId.value}`)
+      const task = response.data
+      
+      refreshProgress.value.percent = task.progress
+      refreshProgress.value.currentTask = task.current_step || ''
+      refreshProgress.value.day = task.processed_days
+      refreshProgress.value.totalDays = task.total_days
+      
+      if (task.status === 'completed') {
+        clearInterval(pollInterval.value)
+        pollInterval.value = null
+        refreshLoading.value = false
+        refreshProgress.value.show = false
+        currentTaskId.value = null
+        ElMessage.success('聚合数据刷新完成')
+        loadAggregationStatus()
+        loadRecentTasks()
+      } else if (task.status === 'failed') {
+        clearInterval(pollInterval.value)
+        pollInterval.value = null
+        refreshLoading.value = false
+        refreshProgress.value.show = false
+        currentTaskId.value = null
+        ElMessage.error(`刷新失败: ${task.error_message || '未知错误'}`)
+        loadRecentTasks()
+      } else if (task.status === 'cancelled') {
+        clearInterval(pollInterval.value)
+        pollInterval.value = null
+        refreshLoading.value = false
+        refreshProgress.value.show = false
+        currentTaskId.value = null
+        ElMessage.warning('任务已取消')
+        loadRecentTasks()
+      }
+    } catch (error) {
+      console.error('轮询任务状态失败:', error)
+    }
+  }, 2000)
+}
+
+const cancelCurrentTask = async () => {
+  if (!currentTaskId.value) return
+  
+  try {
+    await axios.post(`/api/admin/aggregation/tasks/${currentTaskId.value}/cancel`)
+    if (pollInterval.value) {
+      clearInterval(pollInterval.value)
+      pollInterval.value = null
+    }
+    refreshLoading.value = false
+    refreshProgress.value.show = false
+    currentTaskId.value = null
+    ElMessage.success('任务已取消')
+    loadRecentTasks()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '取消任务失败')
+  }
+}
+
+const loadRecentTasks = async () => {
+  try {
+    const response = await axios.get('/api/admin/aggregation/tasks?limit=5')
+    recentTasks.value = response.data.tasks
+  } catch (error) {
+    console.error('加载任务列表失败:', error)
   }
 }
 
@@ -440,89 +709,33 @@ const refreshAggregationByDateRange = async () => {
     refreshProgress.value = {
       show: true,
       percent: 0,
-      currentTask: '正在初始化...',
+      currentTask: '正在创建任务...',
       day: 0,
       totalDays: days
     }
 
-    // 计算日期范围内的所有日期
-    const dates = []
-    let currentDate = new Date(startDate)
-    while (currentDate <= endDate) {
-      dates.push(new Date(currentDate))
-      currentDate.setDate(currentDate.getDate() + 1)
-    }
+    const startDateStr = `${startDate.getFullYear()}-${(startDate.getMonth() + 1).toString().padStart(2, '0')}-${startDate.getDate().toString().padStart(2, '0')}`
+    const endDateStr = `${endDate.getFullYear()}-${(endDate.getMonth() + 1).toString().padStart(2, '0')}-${endDate.getDate().toString().padStart(2, '0')}`
 
-    // 按顺序处理每个日期
-    for (let i = 0; i < dates.length; i++) {
-      const date = dates[i]
-      const dateStr = date.toISOString().split('T')[0]
-      
-      // 调用后端API处理单个日期
-      const eventSource = new EventSource(`/api/admin/aggregation/refresh?days=1&target_date_str=${dateStr}`)
+    const response = await axios.post('/api/admin/aggregation/tasks', {
+      start_date: startDateStr,
+      end_date: endDateStr
+    })
 
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data)
-
-        if (data.type === 'start') {
-          refreshProgress.value.totalDays = dates.length
-          refreshProgress.value.day = i + 1
-        } else if (data.type === 'day_start') {
-          refreshProgress.value.day = i + 1
-          refreshProgress.value.currentTask = `处理 ${data.date}`
-        } else if (data.type === 'progress') {
-          // 计算总进度
-          const totalSteps = dates.length * 5
-          const currentStep = i * 5 + Math.ceil(data.progress / 20)
-          const totalProgress = Math.round((currentStep / totalSteps) * 100)
-          refreshProgress.value.percent = totalProgress
-          refreshProgress.value.currentTask = data.current_task
-        } else if (data.type === 'complete') {
-          eventSource.close()
-          
-          // 如果是最后一个日期，完成整个过程
-          if (i === dates.length - 1) {
-            refreshLoading.value = false
-            refreshProgress.value.show = false
-            ElMessage.success(`成功刷新 ${dates.length} 天的聚合数据`)
-            loadAggregationStatus()
-          }
-        } else if (data.type === 'error') {
-          eventSource.close()
-          refreshLoading.value = false
-          refreshProgress.value.show = false
-          ElMessage.error(data.message)
-        }
-      }
-
-      eventSource.onerror = () => {
-        eventSource.close()
-        refreshLoading.value = false
-        refreshProgress.value.show = false
-        ElMessage.error('连接服务器失败')
-      }
-
-      // 等待当前日期处理完成
-      await new Promise(resolve => {
-        const checkInterval = setInterval(() => {
-          if (!refreshLoading.value || i === dates.length - 1) {
-            clearInterval(checkInterval)
-            resolve()
-          }
-        }, 1000)
-      })
-
-      // 如果发生错误，停止处理
-      if (!refreshLoading.value && i < dates.length - 1) {
-        break
-      }
+    if (response.data.success) {
+      currentTaskId.value = response.data.task_id
+      startPolling()
+    } else {
+      refreshLoading.value = false
+      refreshProgress.value.show = false
+      ElMessage.error(response.data.message || '创建任务失败')
     }
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('刷新失败: ' + (error.message || '未知错误'))
+      refreshLoading.value = false
+      refreshProgress.value.show = false
+      ElMessage.error(error.response?.data?.detail || '刷新失败')
     }
-    refreshLoading.value = false
-    refreshProgress.value.show = false
   }
 }
 
@@ -642,11 +855,89 @@ const deletePurpose = async (id) => {
   }
 }
 
+const refreshDatabaseStatus = async () => {
+  dbStatusLoading.value = true
+  try {
+    const response = await axios.get('/api/admin/database/status')
+    dbStatus.value = response.data
+  } catch (error) {
+    ElMessage.error('获取数据库状态失败')
+  } finally {
+    dbStatusLoading.value = false
+  }
+}
+
+const testDatabaseConnection = async () => {
+  dbTestLoading.value = true
+  connectionTest.value = {
+    main_database: null,
+    local_database: null
+  }
+  try {
+    const response = await axios.get('/api/admin/database/test-connection')
+    connectionTest.value = response.data
+    if (response.data.main_database?.success && response.data.local_database?.success) {
+      ElMessage.success('所有数据库连接正常')
+    } else if (!response.data.main_database?.success || !response.data.local_database?.success) {
+      ElMessage.warning('部分数据库连接异常，请查看详情')
+    }
+  } catch (error) {
+    ElMessage.error('测试连接失败')
+  } finally {
+    dbTestLoading.value = false
+  }
+}
+
+const formatNumber = (num) => {
+  if (num === null || num === undefined) return '0'
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`
+}
+
 onMounted(() => {
   loadConfig()
   loadAggregationStatus()
   loadPurposeList()
+  loadRecentTasks()
+  checkRunningTask()
+  refreshDatabaseStatus()
 })
+
+const checkRunningTask = async () => {
+  try {
+    const response = await axios.get('/api/admin/aggregation/status')
+    if (response.data.running_task_id) {
+      currentTaskId.value = response.data.running_task_id
+      refreshLoading.value = true
+      refreshProgress.value.show = true
+      startPolling()
+    }
+  } catch (error) {
+    console.error('检查运行中任务失败:', error)
+  }
+}
+
+const getStatusText = (status) => {
+  const statusMap = {
+    'pending': '等待中',
+    'running': '运行中',
+    'completed': '已完成',
+    'failed': '失败',
+    'cancelled': '已取消'
+  }
+  return statusMap[status] || status
+}
+
+const formatTaskTime = (timeStr) => {
+  if (!timeStr) return ''
+  const date = new Date(timeStr)
+  return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+}
 </script>
 
 <style lang="scss" scoped>
@@ -754,6 +1045,55 @@ onMounted(() => {
   }
 }
 
+.scheduled-config {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+  border: 1px solid var(--theme-border);
+
+  .scheduled-config-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+
+    .config-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--theme-text);
+    }
+  }
+
+  .scheduled-config-body {
+    padding-top: 10px;
+    border-top: 1px solid var(--theme-border);
+
+    .scheduled-time {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .time-label {
+        font-size: 13px;
+        color: var(--theme-text-secondary);
+      }
+
+      .time-separator {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--theme-text);
+      }
+
+      .time-hint {
+        font-size: 12px;
+        color: var(--theme-text-secondary);
+        margin-left: 5px;
+      }
+    }
+  }
+}
+
 .action-buttons {
   display: flex;
   flex-direction: column;
@@ -798,6 +1138,84 @@ onMounted(() => {
 
   :deep(.el-progress-bar__inner) {
     background: linear-gradient(90deg, var(--theme-primary) 0%, var(--theme-secondary) 100%);
+  }
+}
+
+.recent-tasks {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
+
+  .recent-tasks-header {
+    font-size: 13px;
+    color: var(--theme-text-secondary);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .recent-task-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--theme-border);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .task-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .task-status {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 4px;
+
+        &.completed {
+          background: rgba(103, 194, 58, 0.2);
+          color: #67c23a;
+        }
+
+        &.running {
+          background: rgba(64, 158, 255, 0.2);
+          color: #409eff;
+        }
+
+        &.failed {
+          background: rgba(245, 108, 108, 0.2);
+          color: #f56c6c;
+        }
+
+        &.cancelled {
+          background: rgba(144, 147, 153, 0.2);
+          color: #909399;
+        }
+
+        &.pending {
+          background: rgba(230, 162, 60, 0.2);
+          color: #e6a23c;
+        }
+      }
+
+      .task-time {
+        font-size: 12px;
+        color: var(--theme-text-secondary);
+      }
+    }
+
+    .task-detail {
+      font-size: 12px;
+      color: var(--theme-text-secondary);
+
+      .error-text {
+        color: #f56c6c;
+        margin-left: 8px;
+      }
+    }
   }
 }
 
@@ -1043,5 +1461,187 @@ onMounted(() => {
   .el-form-item {
     margin-bottom: 16px;
   }
+}
+
+.database-header {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.database-section {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--theme-text);
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--theme-border);
+
+    .title-icon {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+
+      &.main-db {
+        background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+        box-shadow: 0 0 8px rgba(64, 158, 255, 0.5);
+      }
+
+      &.local-db {
+        background: linear-gradient(135deg, #e6a23c 0%, #f56c6c 100%);
+        box-shadow: 0 0 8px rgba(230, 162, 60, 0.5);
+      }
+
+      &.cache {
+        background: linear-gradient(135deg, #909399 0%, #c0c4cc 100%);
+        box-shadow: 0 0 8px rgba(144, 147, 153, 0.5);
+      }
+
+      &.test {
+        background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-secondary) 100%);
+        box-shadow: 0 0 8px var(--theme-glow);
+      }
+    }
+  }
+}
+
+.db-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+
+  .db-info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--theme-panel-bg);
+    border-radius: 6px;
+    border: 1px solid var(--theme-border);
+
+    &.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .info-label {
+      color: var(--theme-text-secondary);
+      font-size: 13px;
+
+      &.error {
+        color: #f56c6c;
+      }
+    }
+
+    .info-value {
+      color: var(--theme-text);
+      font-size: 13px;
+      font-weight: 500;
+
+      &.path {
+        font-family: monospace;
+        font-size: 11px;
+        word-break: break-all;
+        max-width: 200px;
+        text-align: right;
+      }
+
+      &.error {
+        color: #f56c6c;
+        font-size: 12px;
+      }
+
+      .pool-detail {
+        color: var(--theme-text-secondary);
+        font-size: 11px;
+        margin-left: 5px;
+      }
+    }
+  }
+}
+
+.tables-section {
+  margin-top: 15px;
+
+  .tables-title {
+    font-size: 13px;
+    color: var(--theme-text-secondary);
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .tables-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+
+    .table-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: var(--theme-panel-bg);
+      border-radius: 6px;
+      border: 1px solid var(--theme-border);
+
+      .table-name {
+        color: var(--theme-text-secondary);
+        font-size: 12px;
+      }
+
+      .table-count {
+        color: var(--theme-primary);
+        font-size: 12px;
+        font-weight: 600;
+      }
+    }
+  }
+}
+
+.test-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  .test-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 15px;
+    background: var(--theme-panel-bg);
+    border-radius: 6px;
+    border: 1px solid var(--theme-border);
+
+    .test-label {
+      color: var(--theme-text);
+      font-size: 13px;
+      font-weight: 500;
+      min-width: 80px;
+    }
+
+    .latency {
+      color: var(--theme-text-secondary);
+      font-size: 12px;
+      margin-left: 10px;
+    }
+
+    .error-text {
+      color: #f56c6c;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+  }
+}
+
+.error-text {
+  color: #f56c6c;
 }
 </style>

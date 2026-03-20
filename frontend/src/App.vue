@@ -252,7 +252,6 @@ const showPanelExpand = (panelType, subType, title, data) => {
 }
 
 const showOrgDetail = (orgId, activeTab = 'devices') => {
-  console.log('[App] showOrgDetail called with orgId:', orgId, 'type:', typeof orgId, 'activeTab:', activeTab)
   currentOrgId.value = orgId
   currentOrgActiveTab.value = activeTab
   orgDetailVisible.value = true
@@ -300,15 +299,12 @@ const usageThresholds = ref({
 const loadUsageThresholds = async () => {
   try {
     const response = await axios.get('/api/admin/config')
-    console.log('[App] Loaded system config:', response.data)
     usageThresholds.value = {
       high: response.data.high_usage_threshold || 60.0,
       low: response.data.low_usage_threshold || 30.0
     }
-    console.log('[App] Usage thresholds set to:', usageThresholds.value)
   } catch (error) {
     console.error('[App] Failed to load usage thresholds:', error)
-    console.log('[App] Using default thresholds: high=60.0, low=30.0')
   }
 }
 

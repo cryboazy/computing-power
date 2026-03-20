@@ -265,18 +265,18 @@ const getDateRange = (type) => {
 }
 
 const dateRange = ref(getDateRangeFromTimeRange(props.timeRange))
-const selectedPurpose = ref(null)
+const selectedPurpose = ref('')
 const purposeList = ref([])
 
 const fetchPurposeList = async () => {
   try {
     const data = await dashboardApi.getPurposeDict()
-    const options = data || []
-    purposeList.value = [{ value: null, label: '全部用途' }, ...options]
+    const options = (data || []).filter(item => item && item.value !== undefined && item.value !== null)
+    purposeList.value = [{ value: '', label: '全部用途' }, ...options]
   } catch (error) {
     console.error('Failed to fetch purpose list:', error)
     purposeList.value = [
-      { value: null, label: '全部用途' },
+      { value: '', label: '全部用途' },
       { value: 1, label: '训练' },
       { value: 2, label: '研发' },
       { value: 3, label: '推理' }
@@ -306,7 +306,6 @@ const tabs = [
 ]
 
 const fetchData = async () => {
-  console.log('[OrgDetailDialog] fetchData called with orgId:', props.orgId, 'type:', typeof props.orgId)
   if (!props.orgId) {
     error.value = '无效的组织机构ID'
     return
@@ -316,16 +315,12 @@ const fetchData = async () => {
   error.value = null
   
   try {
-    console.log('[OrgDetailDialog] Calling API...')
     const data = await dashboardApi.getOrgDetail(props.orgId, props.timeRange, props.timeType)
-    console.log('[OrgDetailDialog] API response:', data)
     if (data.error) {
-      console.log('[OrgDetailDialog] API returned error:', data.error)
       error.value = data.error
     } else {
       orgDetail.value = data
       orgName.value = data.org_name
-      console.log('[OrgDetailDialog] Data loaded successfully')
     }
   } catch (err) {
     console.error('[OrgDetailDialog] Failed to fetch org detail:', err)

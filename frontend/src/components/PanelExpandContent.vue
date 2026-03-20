@@ -76,9 +76,9 @@
             <div class="filter-item">
               <label>时间粒度</label>
               <el-radio-group v-model="carouselTimeGrain" size="small" @change="handleTimeGrainChange">
-                <el-radio-button label="day">日</el-radio-button>
-                <el-radio-button label="week">周</el-radio-button>
-                <el-radio-button label="month">月</el-radio-button>
+                <el-radio-button value="day">日</el-radio-button>
+                <el-radio-button value="week">周</el-radio-button>
+                <el-radio-button value="month">月</el-radio-button>
               </el-radio-group>
             </div>
             <div class="filter-item">
@@ -1070,7 +1070,7 @@ const getCarouselOption = (trend) => {
   const primaryColor = colors.primary
   const borderColor = colors.border
   const textSecondary = colors.textSecondary
-  
+
   const hexToRgba = (hex, alpha) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
     if (result) {
@@ -1078,13 +1078,11 @@ const getCarouselOption = (trend) => {
     }
     return hex
   }
-  
-  const areaColorStart = hexToRgba(primaryColor, 0.3)
-  const areaColorEnd = hexToRgba(primaryColor, 0.05)
-  const splitLineColor = borderColor.includes('rgba') 
-    ? borderColor.replace(/[\d.]+\)$/, '0.1)') 
+
+  const splitLineColor = borderColor.includes('rgba')
+    ? borderColor.replace(/[\d.]+\)$/, '0.1)')
     : hexToRgba(primaryColor, 0.1)
-  
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -1092,37 +1090,40 @@ const getCarouselOption = (trend) => {
       borderColor: borderColor,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        const data = params[0]
-        const dateStr = data.axisValue
-        const usageColor = getUsageColor(data.value)
+        const dateStr = params[0].axisValue
+        let html = `${dateStr}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined) {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
         if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          return `${dateStr}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span><br/><span style="color: ${colors.info}; font-size: 12px;">点击查看24小时详情</span>`
+          html += `<span style="color: ${colors.info}; font-size: 12px;">点击查看24小时详情</span>`
         }
-        return `${dateStr}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span>`
+        return html
       }
     },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      pieces: [
-        { gt: usageThresholds.value.high, color: colors.usageHigh },
-        { gt: usageThresholds.value.low, lte: usageThresholds.value.high, color: colors.usageMedium },
-        { lte: usageThresholds.value.low, color: colors.usageLow }
-      ]
+    legend: {
+      data: ['GPU使用率', '显存使用率', '显存利用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      right: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '5%',
       right: '5%',
       bottom: '15%',
-      top: '10%',
+      top: '18%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
       data: trend.map(d => d.date),
       axisLine: { lineStyle: { color: borderColor } },
-      axisLabel: { 
-        color: textSecondary, 
+      axisLabel: {
+        color: textSecondary,
         fontSize: 10
       },
       triggerEvent: true
@@ -1137,29 +1138,32 @@ const getCarouselOption = (trend) => {
       min: 0,
       max: 100
     },
-    series: [{
-      type: 'line',
-      smooth: true,
-      data: trend.map(d => d.value),
-      lineStyle: { color: primaryColor, width: 2 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: areaColorStart },
-            { offset: 1, color: areaColorEnd }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        data: trend.map(d => d.gpu_usage || d.value),
+        lineStyle: { color: colors.chart1, width: 2 },
+        itemStyle: { color: colors.chart1 }
       },
-      itemStyle: { color: primaryColor },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 10,
-          shadowColor: primaryColor
-        }
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        data: trend.map(d => d.memory_usage_rate || 0),
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 }
+      },
+      {
+        name: '显存利用率',
+        type: 'line',
+        smooth: true,
+        data: trend.map(d => d.memory_utilization || 0),
+        lineStyle: { color: colors.chart3, width: 2 },
+        itemStyle: { color: colors.chart3 }
       }
-    }]
+    ]
   }
 }
 
@@ -1179,8 +1183,8 @@ const drillChartOption = computed(() => {
   
   const areaColorStart = hexToRgba(primaryColor, 0.3)
   const areaColorEnd = hexToRgba(primaryColor, 0.05)
-  const splitLineColor = borderColor.includes('rgba') 
-    ? borderColor.replace(/[\d.]+\)$/, '0.1)') 
+  const splitLineColor = borderColor.includes('rgba')
+    ? borderColor.replace(/[\d.]+\)$/, '0.1)')
     : hexToRgba(primaryColor, 0.1)
   
   return {
@@ -1190,33 +1194,36 @@ const drillChartOption = computed(() => {
       borderColor: borderColor,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        const data = params[0]
-        const usageColor = getUsageColor(data.value)
-        return `${data.axisValue}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span>`
+        const date = params[0].axisValue
+        let html = `${date}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined) {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
       }
     },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      pieces: [
-        { gt: usageThresholds.value.high, color: colors.usageHigh },
-        { gt: usageThresholds.value.low, lte: usageThresholds.value.high, color: colors.usageMedium },
-        { lte: usageThresholds.value.low, color: colors.usageLow }
-      ]
+    legend: {
+      data: ['GPU使用率', '显存使用率', '显存利用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '10%',
       right: '5%',
       bottom: '18%',
-      top: '15%',
+      top: '18%',
       containLabel: true
     },
     xAxis: {
       type: 'category',
       data: drillTrendData.value.map(d => d.date),
       axisLine: { lineStyle: { color: borderColor } },
-      axisLabel: { 
-        color: textSecondary, 
+      axisLabel: {
+        color: textSecondary,
         fontSize: 11,
         interval: 1
       }
@@ -1231,31 +1238,32 @@ const drillChartOption = computed(() => {
       min: 0,
       max: 100
     },
-    series: [{
-      type: 'line',
-      smooth: true,
-      data: drillTrendData.value.map(d => d.value),
-      lineStyle: { color: primaryColor, width: 3 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: areaColorStart },
-            { offset: 1, color: areaColorEnd }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        data: drillTrendData.value.map(d => d.gpu_usage || d.value),
+        lineStyle: { color: colors.chart1, width: 2 },
+        itemStyle: { color: colors.chart1 }
       },
-      itemStyle: { color: primaryColor },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 15,
-          shadowColor: primaryColor
-        }
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        data: drillTrendData.value.map(d => d.memory_usage_rate || 0),
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 }
       },
-      symbol: 'circle',
-      symbolSize: 6
-    }]
+      {
+        name: '显存利用率',
+        type: 'line',
+        smooth: true,
+        data: drillTrendData.value.map(d => d.memory_utilization || 0),
+        lineStyle: { color: colors.chart3, width: 2 },
+        itemStyle: { color: colors.chart3 }
+      }
+    ]
   }
 })
 
@@ -1361,7 +1369,6 @@ const handleChartClick = async (params, orgName, orgId) => {
       
       try {
         const result = await dashboardApi.getCarouselUsageTrend('work', null, null, 'day', null, null, clickedDate, orgId)
-        console.log('Drill result:', result)
         drillTrendData.value = result.trend || []
       } catch (error) {
         console.error('Failed to drill down:', error)
@@ -1375,27 +1382,19 @@ const handleChartClick = async (params, orgName, orgId) => {
 const fetchRightPanelData = async () => {
   try {
     if (props.provinceName) {
-      console.log('Fetching province ranking for:', props.provinceName)
       const ranking = await dashboardApi.getProvinceRanking(props.provinceName, props.timeRange, timeType.value)
-      console.log('Province ranking data:', ranking)
       provinceRanking.value = ranking
       provinceName.value = props.provinceName
     } else if (props.groupName) {
-      console.log('Fetching group ranking for:', props.groupName)
       const groups = await dashboardApi.getOrgGroups()
-      console.log('Groups:', groups)
       const targetGroup = groups.find(g => g.name === props.groupName)
-      console.log('Target group:', targetGroup)
       if (targetGroup) {
         const ranking = await dashboardApi.getGroupRanking(targetGroup.id, props.timeRange, timeType.value)
-        console.log('Group ranking data:', ranking)
         groupRanking.value = ranking
         groupName.value = props.groupName
       }
     } else {
-      console.log('Fetching all ranking')
       const all = await dashboardApi.getAllRanking(props.timeRange, timeType.value)
-      console.log('All ranking data:', all)
       allRanking.value = all
     }
   } catch (error) {
@@ -1406,18 +1405,13 @@ const fetchRightPanelData = async () => {
 const loadData = async () => {
   loading.value = true
   
-  console.log('PanelExpandContent loadData:', props.panelType, props.subType, props.timeRange)
-  
   try {
     if (props.panelType === 'left') {
       await fetchLeftPanelData()
-      console.log('Left panel data loaded:', deviceCountData.value.length, memoryTotalData.value.length)
     } else if (props.panelType === 'center') {
       await fetchCenterPanelData()
-      console.log('Center panel data loaded:', orgTypeData.value, networkByOrgData.value)
     } else if (props.panelType === 'right') {
       await fetchRightPanelData()
-      console.log('Right panel data loaded:', allRanking.value.length, groupRanking.value.length)
     }
   } catch (error) {
     console.error('Failed to load panel data:', error)
@@ -1477,7 +1471,6 @@ const handleExpandPurposeChartClick = (params) => {
 watch(
   () => [props.panelType, props.subType, props.timeRange, props.groupName, props.provinceName, timeType.value],
   ([newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName, newTimeType]) => {
-    console.log('watch triggered:', newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName, newTimeType)
     if (newPanelType && newSubType) {
       loadData()
     }
@@ -1486,7 +1479,6 @@ watch(
 )
 
 onMounted(() => {
-  console.log('PanelExpandContent mounted, props:', props.panelType, props.subType, props.timeRange)
 })
 </script>
 
@@ -1715,7 +1707,7 @@ onMounted(() => {
     
     .carousel-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(400px, 0fr));
       gap: 15px;
       padding-bottom: 10px;
       
@@ -1726,7 +1718,7 @@ onMounted(() => {
         padding: 10px;
         display: flex;
         flex-direction: column;
-        min-height: 200px;
+        min-height: 250px;
         
         .carousel-title {
           font-size: 13px;

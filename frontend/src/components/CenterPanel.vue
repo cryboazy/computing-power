@@ -29,6 +29,20 @@
           <span class="stat-unit">%</span>
         </div>
       </div>
+      <div class="stat-card">
+        <div class="stat-label">显存使用率</div>
+        <div class="stat-value" :title="`显存已用量: ${formatNumber(overviewStats.memory_used_gb)} GB`">
+          {{ overviewStats.memory_usage_rate }}
+          <span class="stat-unit">%</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">显存利用率</div>
+        <div class="stat-value">
+          {{ overviewStats.avg_memory_utilization }}
+          <span class="stat-unit">%</span>
+        </div>
+      </div>
     </div>
     
     <div class="panel charts-section">
@@ -218,6 +232,31 @@
                 <div class="stat-value" :style="{ color: localUsageColor }">{{ localStats.avg_gpu_usage }}<span class="stat-unit">%</span></div>
               </div>
             </div>
+            <div class="local-stat-card">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">显存使用率</div>
+                <div class="stat-value" :title="`显存已用量: ${formatNumber(localStats.memory_used_gb)} GB`">{{ localStats.memory_usage_rate }}<span class="stat-unit">%</span></div>
+              </div>
+            </div>
+            <div class="local-stat-card">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 20V10"/>
+                  <path d="M12 20V4"/>
+                  <path d="M6 20v-6"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">显存利用率</div>
+                <div class="stat-value">{{ localStats.avg_memory_utilization }}<span class="stat-unit">%</span></div>
+              </div>
+            </div>
           </div>
           
           <div class="local-charts-grid">
@@ -290,6 +329,31 @@
               <div class="stat-info">
                 <div class="stat-label">平均使用率</div>
                 <div class="stat-value" :style="{ color: centralUsageColor }">{{ centralStats.avg_gpu_usage }}<span class="stat-unit">%</span></div>
+              </div>
+            </div>
+            <div class="central-stat-card">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">显存使用率</div>
+                <div class="stat-value" :title="`显存已用量: ${formatNumber(centralStats.memory_used_gb)} GB`">{{ centralStats.memory_usage_rate }}<span class="stat-unit">%</span></div>
+              </div>
+            </div>
+            <div class="central-stat-card">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 20V10"/>
+                  <path d="M12 20V4"/>
+                  <path d="M6 20v-6"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">显存利用率</div>
+                <div class="stat-value">{{ centralStats.avg_memory_utilization }}<span class="stat-unit">%</span></div>
               </div>
             </div>
           </div>
@@ -490,7 +554,10 @@ const overviewStats = ref({
   total_devices: 0,
   total_memory_gb: 0,
   total_compute_tflops: 0,
-  avg_gpu_usage: 0
+  avg_gpu_usage: 0,
+  memory_used_gb: 0,
+  memory_usage_rate: 0,
+  avg_memory_utilization: 0
 })
 
 const orgTypeData = ref({})
@@ -504,7 +571,10 @@ const localStats = ref({
   total_devices: 0,
   total_memory_gb: 0,
   total_compute_tflops: 0,
-  avg_gpu_usage: 0
+  avg_gpu_usage: 0,
+  memory_used_gb: 0,
+  memory_usage_rate: 0,
+  avg_memory_utilization: 0
 })
 const localGpuTierData = ref([])
 const localPurposeData = ref([])
@@ -513,7 +583,10 @@ const centralStats = ref({
   total_devices: 0,
   total_memory_gb: 0,
   total_compute_tflops: 0,
-  avg_gpu_usage: 0
+  avg_gpu_usage: 0,
+  memory_used_gb: 0,
+  memory_usage_rate: 0,
+  avg_memory_utilization: 0
 })
 const centralGpuTierData = ref([])
 const centralPurposeData = ref([])
@@ -1673,29 +1746,29 @@ const getCarouselOption = (trend) => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        const data = params[0]
-        const dateStr = data.axisValue
-        const usageColor = getUsageColor(data.value)
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          return `${dateStr}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span><br/><span style="color: ${colors.info}; font-size: 12px;">点击查看24小时详情</span>`
-        }
-        return `${dateStr}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span>`
+        const date = params[0].axisValue
+        let html = `${date}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined) {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
       }
     },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      pieces: [
-        { gt: usageThresholds.value.high, color: colors.usageHigh },
-        { gt: usageThresholds.value.low, lte: usageThresholds.value.high, color: colors.usageMedium },
-        { lte: usageThresholds.value.low, color: colors.usageLow }
-      ]
+    legend: {
+      data: ['GPU使用率', '显存使用率', '显存利用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      right: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '5%',
       right: '5%',
       bottom: '15%',
-      top: '10%',
+      top: '18%',
       containLabel: true
     },
     xAxis: {
@@ -1715,29 +1788,38 @@ const getCarouselOption = (trend) => {
       min: 0,
       max: 100
     },
-    series: [{
-      type: 'line',
-      smooth: true,
-      data: trend.map(d => d.value),
-      lineStyle: { color: colors.chart1, width: 2 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: colors.chart1 + '4D' },
-            { offset: 1, color: colors.chart1 + '0D' }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: trend.map(d => d.gpu_usage || d.value),
+        lineStyle: { color: colors.chart1, width: 2 },
+        itemStyle: { color: colors.chart1 }
       },
-      itemStyle: { color: colors.chart1 },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 10,
-          shadowColor: colors.chart1
-        }
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: trend.map(d => d.memory_usage_rate || 0),
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 }
+      },
+      {
+        name: '显存利用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        data: trend.map(d => d.memory_utilization || 0),
+        lineStyle: { color: colors.chart3, width: 2 },
+        itemStyle: { color: colors.chart3 }
       }
-    }]
+    ]
   }
 }
 
@@ -1750,25 +1832,28 @@ const drillChartOption = computed(() => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        const data = params[0]
-        const usageColor = getUsageColor(data.value)
-        return `${data.axisValue}<br/>使用率: <span style="color: ${usageColor}; font-weight: bold;">${data.value}%</span>`
+        const date = params[0].axisValue
+        let html = `${date}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined) {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
       }
     },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      pieces: [
-        { gt: usageThresholds.value.high, color: colors.usageHigh },
-        { gt: usageThresholds.value.low, lte: usageThresholds.value.high, color: colors.usageMedium },
-        { lte: usageThresholds.value.low, color: colors.usageLow }
-      ]
+    legend: {
+      data: ['GPU使用率', '显存使用率', '显存利用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '10%',
       right: '5%',
       bottom: '18%',
-      top: '15%',
+      top: '18%',
       containLabel: true
     },
     xAxis: {
@@ -1791,31 +1876,32 @@ const drillChartOption = computed(() => {
       min: 0,
       max: 100
     },
-    series: [{
-      type: 'line',
-      smooth: true,
-      data: drillTrendData.value.map(d => d.value),
-      lineStyle: { color: colors.chart1, width: 3 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: colors.chart1 + '4D' },
-            { offset: 1, color: colors.chart1 + '0D' }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        data: drillTrendData.value.map(d => d.gpu_usage || d.value),
+        lineStyle: { color: colors.chart1, width: 2 },
+        itemStyle: { color: colors.chart1 }
       },
-      itemStyle: { color: colors.chart1 },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 15,
-          shadowColor: colors.chart1
-        }
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        data: drillTrendData.value.map(d => d.memory_usage_rate || 0),
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 }
       },
-      symbol: 'circle',
-      symbolSize: 6
-    }]
+      {
+        name: '显存利用率',
+        type: 'line',
+        smooth: true,
+        data: drillTrendData.value.map(d => d.memory_utilization || 0),
+        lineStyle: { color: colors.chart3, width: 2 },
+        itemStyle: { color: colors.chart3 }
+      }
+    ]
   }
 })
 
@@ -1906,7 +1992,6 @@ const fetchData = async () => {
 }
 
 const handleCarouselChange = (index) => {
-  console.log('Carousel changed to:', index)
 }
 
 const handleCarouselChartClick = async (params, item) => {

@@ -271,13 +271,31 @@ const gpuUsageOption = computed(() => {
       trigger: 'axis',
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
-      textStyle: { color: colors.text }
+      textStyle: { color: colors.text },
+      formatter: (params) => {
+        const date = params[0].axisValue
+        let html = `${date}<br/>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined) {
+            html += `${p.marker} ${p.seriesName}: <strong>${p.value}%</strong><br/>`
+          }
+        })
+        return html
+      }
+    },
+    legend: {
+      data: ['GPU使用率', '显存使用率', '显存利用率'],
+      textStyle: { color: colors.textSecondary },
+      top: 0,
+      right: 0,
+      itemWidth: 12,
+      itemHeight: 8
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
-      top: '10%',
+      top: '18%',
       containLabel: true
     },
     xAxis: {
@@ -298,26 +316,38 @@ const gpuUsageOption = computed(() => {
       },
       splitLine: { lineStyle: { color: colors.borderLight } }
     },
-    series: [{
-      name: 'GPU平均使用率(%)',
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: { color: colors.chart4, width: 2 },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: colors.chart4 + '4D' },
-            { offset: 1, color: colors.chart4 + '0D' }
-          ]
-        }
+    series: [
+      {
+        name: 'GPU使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { color: colors.chart4, width: 2 },
+        itemStyle: { color: colors.chart4 },
+        data: gpuUsageData.value.map(d => d.gpu_usage)
       },
-      itemStyle: { color: colors.chart4 },
-      data: gpuUsageData.value.map(d => d.value)
-    }]
+      {
+        name: '显存使用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { color: colors.chart2, width: 2 },
+        itemStyle: { color: colors.chart2 },
+        data: gpuUsageData.value.map(d => d.memory_usage_rate)
+      },
+      {
+        name: '显存利用率',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        lineStyle: { color: colors.chart3, width: 2 },
+        itemStyle: { color: colors.chart3 },
+        data: gpuUsageData.value.map(d => d.memory_utilization)
+      }
+    ]
   }
 })
 
