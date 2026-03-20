@@ -5,11 +5,26 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, date, timedelta
 
 from app.api_cached import router as api_router
-from app.admin import router as admin_router
+from app.admin import router as admin_router, set_aggregation_config_changed_callback
 from app.aggregator import DataAggregator
 from app.cache_sync import CacheSyncService
 from app.database import SessionLocal
-from app.local_database import init_local_db, LocalSessionLocal
+from app.local_database import init_local_db, LocalSessionLocal, LocalSystemConfig
+
+
+def get_auto_aggregation_config():
+    local_db = LocalSessionLocal()
+    try:
+        configs = local_db.query(LocalSystemConfig).all()
+        config_map = {c.config_key: c.config_value for c in configs}
+
+        enabled = config_map.get("auto_aggregation_enabled", "true").lower() == "true"
+        hour = int(config_map.get("auto_aggregation_hour", 1))
+        minute = int(config_map.get("auto_aggregation_minute", 0))
+
+        return enabled, hour, minute
+    finally:
+        local_db.close()
 
 
 def scheduled_aggregation():
@@ -40,13 +55,29 @@ def scheduled_cache_sync():
 
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(scheduled_aggregation, 'cron', hour=1, minute=0)
+
+
+def setup_aggregation_job():
+    enabled, hour, minute = get_auto_aggregation_config()
+
+    for job in scheduler.get_jobs():
+        if job.id == "auto_aggregation":
+            scheduler.remove_job("auto_aggregation")
+
+    if enabled:
+        scheduler.add_job(scheduled_aggregation, 'cron', hour=hour, minute=minute, id="auto_aggregation")
+        print(f"自动聚合任务已设置: 每天 {hour:02d}:{minute:02d}")
+    else:
+        print("自动聚合任务已禁用")
+
+
+setup_aggregation_job()
 scheduler.add_job(scheduled_cache_sync, 'cron', hour='*', minute=5)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_local_db()
+    init_local_db(upgrade=True)
     print("初始化缓存数据...")
     db = SessionLocal()
     local_db = LocalSessionLocal()
@@ -86,6 +117,13 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
+
+
+def on_aggregation_config_changed():
+    setup_aggregation_job()
+
+
+set_aggregation_config_changed_callback(on_aggregation_config_changed)
 
 
 @app.get("/")

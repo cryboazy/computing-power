@@ -53,6 +53,8 @@ frontend/dist/
 *.sqlite
 *.sqlite3
 backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
 
 # Logs
 logs/

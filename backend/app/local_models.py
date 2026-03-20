@@ -61,6 +61,7 @@ class LocalDailyDeviceSummary(LocalBase):
     avg_gpu_usage_rate = Column(Numeric(5, 2), default=0.00)
     avg_gpu_usage_rate_work = Column(Numeric(5, 2), default=0.00)
     avg_gpu_usage_rate_nonwork = Column(Numeric(5, 2), default=0.00)
+    avg_memory_usage_rate = Column(Numeric(5, 2), default=0.00)
     summary_date = Column(DateTime, nullable=False)
     create_time = Column(DateTime, default=datetime.now)
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -83,6 +84,7 @@ class LocalDeviceHourlyStats(LocalBase):
     stat_date = Column(DateTime, nullable=False)
     stat_hour = Column(Integer, nullable=False)
     avg_gpu_usage_rate = Column(Numeric(5, 2), default=0.00)
+    avg_memory_usage_rate = Column(Numeric(5, 2), default=0.00)
     device_count = Column(Integer, default=0)
     is_work_hour = Column(Integer, default=0)
     create_time = Column(DateTime, default=datetime.now)
@@ -176,6 +178,7 @@ class LocalOrgHourlyStats(LocalBase):
     stat_date = Column(DateTime, nullable=False)
     stat_hour = Column(SmallInteger, nullable=False)
     avg_gpu_usage_rate = Column(Numeric(5, 2), default=0.00)
+    avg_memory_usage_rate = Column(Numeric(5, 2), default=0.00)
     device_count = Column(Integer, default=0)
     is_work_hour = Column(SmallInteger, default=1)
     create_time = Column(DateTime, default=datetime.now)
@@ -346,4 +349,30 @@ class LocalPurposeDict(LocalBase):
     __table_args__ = (
         Index('idx_cached_purpose_type', 'dict_type'),
         Index('idx_cached_purpose_value', 'dict_value'),
+    )
+
+
+class LocalAggregationTask(LocalBase):
+    __tablename__ = "aggregation_task"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(36), unique=True, nullable=False)
+    task_type = Column(String(20), default="refresh")
+    status = Column(String(20), default="pending")
+    progress = Column(Integer, default=0)
+    current_step = Column(String(255), default="")
+    total_steps = Column(Integer, default=0)
+    processed_days = Column(Integer, default=0)
+    total_days = Column(Integer, default=0)
+    target_dates = Column(Text, default="[]")
+    error_message = Column(Text)
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        Index('idx_task_id', 'task_id'),
+        Index('idx_task_status', 'status'),
+        Index('idx_task_create_time', 'create_time'),
     )

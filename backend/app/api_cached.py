@@ -129,6 +129,9 @@ class OverviewStats(BaseModel):
     total_memory_gb: float
     total_compute_tflops: float
     avg_gpu_usage: float
+    memory_used_gb: float
+    memory_usage_rate: float
+    avg_memory_utilization: float
 
 
 class TrendData(BaseModel):
@@ -183,19 +186,29 @@ def get_overview_stats(
     ).all()
     
     if time_type == "work":
-        values = [float(s.avg_gpu_usage_rate_work or 0) for s in summaries if s.avg_gpu_usage_rate_work is not None]
+        gpu_values = [float(s.avg_gpu_usage_rate_work or 0) for s in summaries if s.avg_gpu_usage_rate_work is not None]
+        memory_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
     elif time_type == "nonwork":
-        values = [float(s.avg_gpu_usage_rate_nonwork or 0) for s in summaries if s.avg_gpu_usage_rate_nonwork is not None]
+        gpu_values = [float(s.avg_gpu_usage_rate_nonwork or 0) for s in summaries if s.avg_gpu_usage_rate_nonwork is not None]
+        memory_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
     else:
-        values = [float(s.avg_gpu_usage_rate or 0) for s in summaries if s.avg_gpu_usage_rate is not None]
+        gpu_values = [float(s.avg_gpu_usage_rate or 0) for s in summaries if s.avg_gpu_usage_rate is not None]
+        memory_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
     
-    avg_gpu_usage = round(sum(values) / len(values), 2) if values else 0
+    avg_gpu_usage = round(sum(gpu_values) / len(gpu_values), 2) if gpu_values else 0
+    avg_memory_utilization = round(sum(memory_values) / len(memory_values), 2) if memory_values else 0
+    
+    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
+    memory_usage_rate = avg_memory_utilization
     
     return OverviewStats(
         total_devices=total_devices,
         total_memory_gb=round(total_memory_gb, 2),
         total_compute_tflops=round(total_compute_tflops, 2),
-        avg_gpu_usage=avg_gpu_usage
+        avg_gpu_usage=avg_gpu_usage,
+        memory_used_gb=memory_used_gb,
+        memory_usage_rate=memory_usage_rate,
+        avg_memory_utilization=avg_memory_utilization
     )
 
 
@@ -325,15 +338,21 @@ def get_gpu_usage_trend(
     result = []
     for s in summaries:
         if time_type == "work":
-            value = float(s.avg_gpu_usage_rate_work or 0)
+            gpu_value = float(s.avg_gpu_usage_rate_work or 0)
         elif time_type == "nonwork":
-            value = float(s.avg_gpu_usage_rate_nonwork or 0)
+            gpu_value = float(s.avg_gpu_usage_rate_nonwork or 0)
         else:
-            value = float(s.avg_gpu_usage_rate or 0)
-        result.append(TrendData(
-            date=s.summary_date.strftime("%Y-%m-%d"),
-            value=value
-        ))
+            gpu_value = float(s.avg_gpu_usage_rate or 0)
+        
+        memory_usage_rate = float(s.avg_memory_usage_rate or 0)
+        memory_utilization = float(s.avg_memory_usage_rate or 0)
+        
+        result.append({
+            "date": s.summary_date.strftime("%Y-%m-%d"),
+            "gpu_usage": gpu_value,
+            "memory_usage_rate": memory_usage_rate,
+            "memory_utilization": memory_utilization
+        })
     
     return result
 
@@ -855,7 +874,8 @@ def get_local_stats(
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
     
     org_summaries = local_db.query(
-        func.avg(usage_field).label('avg_usage')
+        func.avg(usage_field).label('avg_usage'),
+        func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
     ).filter(
         LocalOrgGpuUsageSummary.organization_id3.in_(local_org_ids),
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
@@ -863,12 +883,19 @@ def get_local_stats(
     ).first()
     
     avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
+    avg_memory_utilization = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
+    
+    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
+    memory_usage_rate = avg_memory_utilization
     
     return {
         "total_devices": total_devices,
         "total_memory_gb": round(total_memory_gb, 2),
         "total_compute_tflops": round(total_compute_tflops, 2),
-        "avg_gpu_usage": avg_gpu_usage
+        "avg_gpu_usage": avg_gpu_usage,
+        "memory_used_gb": memory_used_gb,
+        "memory_usage_rate": memory_usage_rate,
+        "avg_memory_utilization": avg_memory_utilization
     }
 
 
@@ -1001,7 +1028,8 @@ def get_central_stats(
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
     
     org_summaries = local_db.query(
-        func.avg(usage_field).label('avg_usage')
+        func.avg(usage_field).label('avg_usage'),
+        func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
     ).filter(
         LocalOrgGpuUsageSummary.organization_id3.in_(central_org_ids),
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
@@ -1009,12 +1037,19 @@ def get_central_stats(
     ).first()
     
     avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
+    avg_memory_utilization = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
+    
+    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
+    memory_usage_rate = avg_memory_utilization
     
     return {
         "total_devices": total_devices,
         "total_memory_gb": round(total_memory_gb, 2),
         "total_compute_tflops": round(total_compute_tflops, 2),
-        "avg_gpu_usage": avg_gpu_usage
+        "avg_gpu_usage": avg_gpu_usage,
+        "memory_used_gb": memory_used_gb,
+        "memory_usage_rate": memory_usage_rate,
+        "avg_memory_utilization": avg_memory_utilization
     }
 
 
@@ -1416,7 +1451,9 @@ def get_carousel_usage_trend(
             for h in hourly_stats:
                 hour_trend.append({
                     "date": f"{h.stat_hour:02d}:00",
-                    "value": round(float(h.avg_gpu_usage_rate or 0), 2)
+                    "gpu_usage": round(float(h.avg_gpu_usage_rate or 0), 2),
+                    "memory_usage_rate": round(float(h.avg_memory_usage_rate or 0), 2),
+                    "memory_utilization": round(float(h.avg_memory_usage_rate or 0), 2)
                 })
             
             if hourly_stats:
@@ -1440,12 +1477,14 @@ def get_carousel_usage_trend(
             for h in hourly_stats:
                 hour_trend.append({
                     "date": f"{h.stat_hour:02d}:00",
-                    "value": round(float(h.avg_usage or 0), 2)
+                    "gpu_usage": round(float(h.avg_usage or 0), 2),
+                    "memory_usage_rate": 0,
+                    "memory_utilization": 0
                 })
         
         for hour in range(24):
             if not any(t["date"] == f"{hour:02d}:00" for t in hour_trend):
-                hour_trend.append({"date": f"{hour:02d}:00", "value": 0})
+                hour_trend.append({"date": f"{hour:02d}:00", "gpu_usage": 0, "memory_usage_rate": 0, "memory_utilization": 0})
         
         hour_trend.sort(key=lambda x: x["date"])
         
@@ -1504,7 +1543,8 @@ def get_carousel_usage_trend(
         LocalOrgGpuUsageSummary.organization_id3,
         LocalOrgGpuUsageSummary.organization_name3,
         sqlite_date_format(LocalOrgGpuUsageSummary.summary_time, date_format).label('stat_date'),
-        func.avg(usage_field).label('avg_usage')
+        func.avg(usage_field).label('avg_usage'),
+        func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
     ).filter(
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
         LocalOrgGpuUsageSummary.summary_time <= end_datetime
@@ -1532,7 +1572,9 @@ def get_carousel_usage_trend(
             org_ids[org_name_result] = org_id_result
         org_trends[org_name_result].append({
             "date": s.stat_date,
-            "value": round(float(s.avg_usage or 0), 2)
+            "gpu_usage": round(float(s.avg_usage or 0), 2),
+            "memory_usage_rate": round(float(s.avg_memory_usage or 0), 2),
+            "memory_utilization": round(float(s.avg_memory_usage or 0), 2)
         })
     
     return [
@@ -1614,7 +1656,8 @@ def get_org_detail(
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
     
     org_usage = local_db.query(
-        func.avg(usage_field).label('avg_usage')
+        func.avg(usage_field).label('avg_usage'),
+        func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
     ).filter(
         LocalOrgGpuUsageSummary.organization_id3 == org_id,
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
@@ -1622,6 +1665,7 @@ def get_org_detail(
     ).first()
     
     avg_usage_rate = round(float(org_usage.avg_usage or 0), 2) if org_usage and org_usage.avg_usage else 0
+    avg_memory_utilization = round(float(org_usage.avg_memory_usage or 0), 2) if org_usage and org_usage.avg_memory_usage else 0
     
     device_list = []
     for device in devices:
@@ -1653,6 +1697,17 @@ def get_org_detail(
         if latest_monitor and latest_monitor.avg_gpu_utilization is not None:
             avg_usage = float(latest_monitor.avg_gpu_utilization)
         
+        memory_used_gb = 0
+        memory_usage_rate = 0
+        memory_utilization = 0
+        if latest_monitor:
+            if latest_monitor.used_memory_mb is not None:
+                memory_used_gb = round(float(latest_monitor.used_memory_mb) / 1024, 2)
+            if latest_monitor.memory_usage_percent is not None:
+                memory_usage_rate = round(float(latest_monitor.memory_usage_percent), 2)
+            if latest_monitor.avg_memory_utilization is not None:
+                memory_utilization = round(float(latest_monitor.avg_memory_utilization), 2)
+        
         updated_at = None
         if latest_monitor:
             updated_at = latest_monitor.collection_timestamp.isoformat() if latest_monitor.collection_timestamp else None
@@ -1669,11 +1724,17 @@ def get_org_detail(
             "memory_size": float(device.memory_size or 0),
             "disk_size": float(device.disk_size or 0),
             "usage_rate": avg_usage,
+            "memory_used_gb": memory_used_gb,
+            "memory_usage_rate": memory_usage_rate,
+            "memory_utilization": memory_utilization,
             "is_online": is_online,
             "purpose": device.purpose,
             "net_module_name": device.net_module_name,
             "updated_at": updated_at
         })
+    
+    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
+    memory_usage_rate = avg_memory_utilization
     
     return {
         "org_id": org.id,
@@ -1684,6 +1745,9 @@ def get_org_detail(
         "total_memory_gb": round(total_memory_gb, 2),
         "total_compute_tflops": round(total_compute_tflops, 2),
         "avg_usage_rate": avg_usage_rate,
+        "memory_used_gb": memory_used_gb,
+        "memory_usage_rate": memory_usage_rate,
+        "avg_memory_utilization": avg_memory_utilization,
         "devices": device_list
     }
 
@@ -1714,6 +1778,9 @@ def get_org_usage_trend(
     monthly_data = {}
     daily_data = {}
     hourly_data = {}
+    monthly_memory_data = {}
+    daily_memory_data = {}
+    hourly_memory_data = {}
     
     if purpose is not None:
         device_query = local_db.query(LocalDevice.id).filter(
@@ -1751,13 +1818,19 @@ def get_org_usage_trend(
             else:
                 val = float(summary.avg_gpu_usage_rate or 0)
             
+            memory_val = float(summary.avg_memory_usage_rate or 0)
+            
             if month_key not in monthly_data:
                 monthly_data[month_key] = []
+                monthly_memory_data[month_key] = []
             monthly_data[month_key].append(val)
+            monthly_memory_data[month_key].append(memory_val)
             
             if day_key not in daily_data:
                 daily_data[day_key] = []
+                daily_memory_data[day_key] = []
             daily_data[day_key].append(val)
+            daily_memory_data[day_key].append(memory_val)
         
         for hourly in local_db.query(LocalDeviceHourlyStats).filter(
             LocalDeviceHourlyStats.device_id.in_(device_ids),
@@ -1772,7 +1845,9 @@ def get_org_usage_trend(
             hour_key = str(hourly.stat_hour)
             if hour_key not in hourly_data:
                 hourly_data[hour_key] = []
+                hourly_memory_data[hour_key] = []
             hourly_data[hour_key].append(float(hourly.avg_gpu_usage_rate or 0))
+            hourly_memory_data[hour_key].append(0)
     else:
         for summary in local_db.query(LocalOrgGpuUsageSummary).filter(
             LocalOrgGpuUsageSummary.organization_id3 == org_id,
@@ -1789,13 +1864,19 @@ def get_org_usage_trend(
             else:
                 val = float(summary.avg_gpu_usage_rate or 0)
             
+            memory_val = float(summary.avg_memory_usage_rate or 0)
+            
             if month_key not in monthly_data:
                 monthly_data[month_key] = []
+                monthly_memory_data[month_key] = []
             monthly_data[month_key].append(val)
+            monthly_memory_data[month_key].append(memory_val)
             
             if day_key not in daily_data:
                 daily_data[day_key] = []
+                daily_memory_data[day_key] = []
             daily_data[day_key].append(val)
+            daily_memory_data[day_key].append(memory_val)
         
         for hourly in local_db.query(LocalOrgHourlyStats).filter(
             LocalOrgHourlyStats.organization_id3 == org_id,
@@ -1810,25 +1891,37 @@ def get_org_usage_trend(
             hour_key = str(hourly.stat_hour)
             if hour_key not in hourly_data:
                 hourly_data[hour_key] = []
+                hourly_memory_data[hour_key] = []
             hourly_data[hour_key].append(float(hourly.avg_gpu_usage_rate or 0))
+            hourly_memory_data[hour_key].append(0)
     
     monthly_result = [
-        {"month": k, "avg_usage": round(sum(v) / len(v), 2) if v else 0}
-        for k, v in sorted(monthly_data.items())
+        {
+            "month": k, 
+            "avg_usage": round(sum(monthly_data.get(k, [])) / len(monthly_data.get(k, [])), 2) if monthly_data.get(k) else 0,
+            "avg_memory_usage": round(sum(monthly_memory_data.get(k, [])) / len(monthly_memory_data.get(k, [])), 2) if monthly_memory_data.get(k) else 0
+        }
+        for k in sorted(monthly_data.keys())
     ]
     
     daily_result = [
-        {"date": k, "avg_usage": round(sum(v) / len(v), 2) if v else 0}
-        for k, v in sorted(daily_data.items())
+        {
+            "date": k, 
+            "avg_usage": round(sum(daily_data.get(k, [])) / len(daily_data.get(k, [])), 2) if daily_data.get(k) else 0,
+            "avg_memory_usage": round(sum(daily_memory_data.get(k, [])) / len(daily_memory_data.get(k, [])), 2) if daily_memory_data.get(k) else 0
+        }
+        for k in sorted(daily_data.keys())
     ]
     
     hourly_result = []
     for hour in range(24):
         hour_key = str(hour)
         values = hourly_data.get(hour_key, [])
+        memory_values = hourly_memory_data.get(hour_key, [])
         hourly_result.append({
             "hour": hour,
-            "avg_usage": round(sum(values) / len(values), 2) if values else 0
+            "avg_usage": round(sum(values) / len(values), 2) if values else 0,
+            "avg_memory_usage": round(sum(memory_values) / len(memory_values), 2) if memory_values else 0
         })
     
     warning_info = None

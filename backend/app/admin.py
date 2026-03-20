@@ -2,21 +2,30 @@ import hashlib
 import secrets
 import json
 import asyncio
+import os
 from datetime import datetime, date, timedelta
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
-from app.local_database import get_local_db
-from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict
+from app.local_database import get_local_db, LOCAL_DB_PATH, local_engine
+from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict, LocalCacheMetadata
 from app.aggregator import DataAggregator
 from app.database import SessionLocal
+from app import task_executor
 
 
 router = APIRouter()
+
+_aggregation_config_changed_callback = None
+
+
+def set_aggregation_config_changed_callback(callback):
+    global _aggregation_config_changed_callback
+    _aggregation_config_changed_callback = callback
 
 
 ADMIN_PASSWORD_KEY = "admin_password"
@@ -63,6 +72,9 @@ class ConfigUpdateRequest(BaseModel):
     work_hour_end: Optional[int] = None
     high_usage_threshold: Optional[float] = None
     low_usage_threshold: Optional[float] = None
+    auto_aggregation_enabled: Optional[bool] = None
+    auto_aggregation_hour: Optional[int] = None
+    auto_aggregation_minute: Optional[int] = None
 
 
 class ConfigResponse(BaseModel):
@@ -70,6 +82,9 @@ class ConfigResponse(BaseModel):
     work_hour_end: int
     high_usage_threshold: float
     low_usage_threshold: float
+    auto_aggregation_enabled: bool
+    auto_aggregation_hour: int
+    auto_aggregation_minute: int
 
 
 class AggregationRequest(BaseModel):
@@ -112,7 +127,10 @@ def get_system_config(db: Session = Depends(get_local_db)):
         work_hour_start=int(config_map.get("work_hour_start", 9)),
         work_hour_end=int(config_map.get("work_hour_end", 18)),
         high_usage_threshold=float(config_map.get("high_usage_threshold", 60.0)),
-        low_usage_threshold=float(config_map.get("low_usage_threshold", 30.0))
+        low_usage_threshold=float(config_map.get("low_usage_threshold", 30.0)),
+        auto_aggregation_enabled=config_map.get("auto_aggregation_enabled", "true").lower() == "true",
+        auto_aggregation_hour=int(config_map.get("auto_aggregation_hour", 1)),
+        auto_aggregation_minute=int(config_map.get("auto_aggregation_minute", 0))
     )
 
 
@@ -192,7 +210,62 @@ def update_system_config(request: ConfigUpdateRequest, db: Session = Depends(get
             db.add(config)
         updates.append("low_usage_threshold")
     
+    if request.auto_aggregation_enabled is not None:
+        config = db.query(LocalSystemConfig).filter(
+            LocalSystemConfig.config_key == "auto_aggregation_enabled"
+        ).first()
+        if config:
+            config.config_value = str(request.auto_aggregation_enabled).lower()
+            config.update_time = datetime.now()
+        else:
+            config = LocalSystemConfig(
+                config_key="auto_aggregation_enabled",
+                config_value=str(request.auto_aggregation_enabled).lower(),
+                description="自动聚合任务开关"
+            )
+            db.add(config)
+        updates.append("auto_aggregation_enabled")
+    
+    if request.auto_aggregation_hour is not None:
+        if request.auto_aggregation_hour < 0 or request.auto_aggregation_hour > 23:
+            raise HTTPException(status_code=400, detail="自动聚合小时必须在0-23之间")
+        config = db.query(LocalSystemConfig).filter(
+            LocalSystemConfig.config_key == "auto_aggregation_hour"
+        ).first()
+        if config:
+            config.config_value = str(request.auto_aggregation_hour)
+            config.update_time = datetime.now()
+        else:
+            config = LocalSystemConfig(
+                config_key="auto_aggregation_hour",
+                config_value=str(request.auto_aggregation_hour),
+                description="自动聚合执行小时"
+            )
+            db.add(config)
+        updates.append("auto_aggregation_hour")
+    
+    if request.auto_aggregation_minute is not None:
+        if request.auto_aggregation_minute < 0 or request.auto_aggregation_minute > 59:
+            raise HTTPException(status_code=400, detail="自动聚合分钟必须在0-59之间")
+        config = db.query(LocalSystemConfig).filter(
+            LocalSystemConfig.config_key == "auto_aggregation_minute"
+        ).first()
+        if config:
+            config.config_value = str(request.auto_aggregation_minute)
+            config.update_time = datetime.now()
+        else:
+            config = LocalSystemConfig(
+                config_key="auto_aggregation_minute",
+                config_value=str(request.auto_aggregation_minute),
+                description="自动聚合执行分钟"
+            )
+            db.add(config)
+        updates.append("auto_aggregation_minute")
+    
     db.commit()
+    
+    if _aggregation_config_changed_callback and any(u in updates for u in ["auto_aggregation_enabled", "auto_aggregation_hour", "auto_aggregation_minute"]):
+        _aggregation_config_changed_callback()
     
     return {"success": True, "message": f"配置更新成功: {', '.join(updates)}"}
 
@@ -314,14 +387,90 @@ def get_aggregation_status(db: Session = Depends(get_local_db)):
     if latest_daily:
         latest_time = latest_daily.summary_date.strftime("%Y-%m-%d")
     
+    running_task_id = task_executor.get_running_task_id()
+    
     return {
         "daily_summary_count": daily_count,
         "device_summary_count": device_count,
         "org_summary_count": org_count,
         "statistics_count": stats_count,
         "org_hourly_count": org_hourly_count,
-        "latest_aggregation_time": latest_time
+        "latest_aggregation_time": latest_time,
+        "running_task_id": running_task_id
     }
+
+
+class CreateTaskRequest(BaseModel):
+    days: Optional[int] = 1
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+@router.post("/aggregation/tasks")
+def create_aggregation_task(request: CreateTaskRequest):
+    running_task_id = task_executor.get_running_task_id()
+    if running_task_id:
+        raise HTTPException(status_code=400, detail="已有任务正在运行，请等待完成或取消后再试")
+    
+    target_dates = []
+    
+    if request.start_date and request.end_date:
+        try:
+            start = datetime.strptime(request.start_date, "%Y-%m-%d").date()
+            end = datetime.strptime(request.end_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，请使用YYYY-MM-DD格式")
+        
+        if start > end:
+            raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+        
+        days_diff = (end - start).days + 1
+        if days_diff > 365:
+            raise HTTPException(status_code=400, detail="日期范围不能超过365天")
+        
+        current = start
+        while current <= end:
+            target_dates.append(current)
+            current += timedelta(days=1)
+    else:
+        if request.days < 1 or request.days > 365:
+            raise HTTPException(status_code=400, detail="天数必须在1-365之间")
+        
+        for i in range(request.days):
+            dt = date.today() - timedelta(days=i+1)
+            target_dates.append(dt)
+    
+    task_id = task_executor.start_aggregation_task(target_dates)
+    if not task_id:
+        raise HTTPException(status_code=500, detail="创建任务失败")
+    
+    return {
+        "success": True,
+        "task_id": task_id,
+        "message": f"已创建刷新任务，共 {len(target_dates)} 天"
+    }
+
+
+@router.get("/aggregation/tasks/{task_id}")
+def get_task_status(task_id: str):
+    task = task_executor.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return task
+
+
+@router.get("/aggregation/tasks")
+def get_task_list(limit: int = 10):
+    tasks = task_executor.get_recent_tasks(limit)
+    return {"tasks": tasks}
+
+
+@router.post("/aggregation/tasks/{task_id}/cancel")
+def cancel_aggregation_task(task_id: str):
+    success = task_executor.cancel_task(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="无法取消任务，任务可能已完成或已取消")
+    return {"success": True, "message": "任务已取消"}
 
 
 class PurposeDictRequest(BaseModel):
@@ -472,3 +621,180 @@ def delete_purpose(purpose_id: int, db: Session = Depends(get_local_db)):
     db.commit()
     
     return {"success": True, "message": "设备用途删除成功"}
+
+
+@router.get("/database/status")
+def get_database_status(local_db: Session = Depends(get_local_db)):
+    result = {
+        "main_database": {
+            "status": "unknown",
+            "host": None,
+            "port": None,
+            "database": None,
+            "connection_pool": None,
+            "error": None
+        },
+        "local_database": {
+            "status": "unknown",
+            "path": LOCAL_DB_PATH,
+            "size_mb": 0,
+            "size_human": "0 MB",
+            "tables": {},
+            "error": None
+        },
+        "cache_status": []
+    }
+    
+    # 检测主数据库状态
+    try:
+        from app.config import settings
+        result["main_database"]["host"] = settings.DB_HOST
+        result["main_database"]["port"] = settings.DB_PORT
+        result["main_database"]["database"] = settings.DB_NAME
+        
+        main_db = SessionLocal()
+        try:
+            main_db.execute(text("SELECT 1"))
+            result["main_database"]["status"] = "connected"
+            
+            # 获取连接池状态
+            pool = engine.pool
+            pool_info = {
+                "size": pool.size(),
+                "checked_in": pool.checkedin(),
+                "checked_out": pool.checkedout(),
+                "overflow": pool.overflow()
+            }
+            # invalidatedcount 方法可能不存在于所有版本
+            try:
+                pool_info["invalid"] = pool.invalidatedcount()
+            except AttributeError:
+                pool_info["invalid"] = 0
+            result["main_database"]["connection_pool"] = pool_info
+        finally:
+            main_db.close()
+    except Exception as e:
+        result["main_database"]["status"] = "disconnected"
+        result["main_database"]["error"] = str(e)
+    
+    # 检测本地数据库状态
+    try:
+        # 检查文件是否存在并获取大小
+        if os.path.exists(LOCAL_DB_PATH):
+            file_size = os.path.getsize(LOCAL_DB_PATH)
+            result["local_database"]["size_mb"] = round(file_size / (1024 * 1024), 2)
+            if file_size >= 1024 * 1024 * 1024:
+                result["local_database"]["size_human"] = f"{round(file_size / (1024 * 1024 * 1024), 2)} GB"
+            elif file_size >= 1024 * 1024:
+                result["local_database"]["size_human"] = f"{round(file_size / (1024 * 1024), 2)} MB"
+            elif file_size >= 1024:
+                result["local_database"]["size_human"] = f"{round(file_size / 1024, 2)} KB"
+            else:
+                result["local_database"]["size_human"] = f"{file_size} Bytes"
+        
+        # 测试连接
+        local_db.execute(text("SELECT 1"))
+        result["local_database"]["status"] = "connected"
+        
+        # 获取各表记录数
+        tables_to_check = [
+            ("cached_organization", "组织缓存"),
+            ("cached_device", "设备缓存"),
+            ("cached_gpu_card_info", "GPU卡信息缓存"),
+            ("cached_network", "网络缓存"),
+            ("daily_gpu_usage_summary", "日GPU使用汇总"),
+            ("daily_device_summary", "日设备汇总"),
+            ("org_gpu_usage_summary", "组织GPU使用汇总"),
+            ("device_hourly_stats", "设备小时统计"),
+            ("org_hourly_stats", "组织小时统计"),
+            ("statistics_data", "统计数据"),
+            ("cache_metadata", "缓存元数据"),
+            ("aggregation_task", "聚合任务")
+        ]
+        
+        for table_name, display_name in tables_to_check:
+            try:
+                count = local_db.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                result["local_database"]["tables"][table_name] = {
+                    "display_name": display_name,
+                    "count": count
+                }
+            except Exception:
+                result["local_database"]["tables"][table_name] = {
+                    "display_name": display_name,
+                    "count": 0,
+                    "error": "表不存在或查询失败"
+                }
+        
+        # 获取SQLite页面信息
+        try:
+            page_count = local_db.execute(text("PRAGMA page_count")).scalar()
+            page_size = local_db.execute(text("PRAGMA page_size")).scalar()
+            result["local_database"]["sqlite_info"] = {
+                "page_count": page_count,
+                "page_size": page_size,
+                "journal_mode": local_db.execute(text("PRAGMA journal_mode")).scalar(),
+                "synchronous": local_db.execute(text("PRAGMA synchronous")).scalar()
+            }
+        except Exception:
+            pass
+            
+    except Exception as e:
+        result["local_database"]["status"] = "disconnected"
+        result["local_database"]["error"] = str(e)
+    
+    # 获取缓存同步状态
+    try:
+        cache_metadata = local_db.query(LocalCacheMetadata).all()
+        for m in cache_metadata:
+            result["cache_status"].append({
+                "cache_name": m.cache_name,
+                "last_sync_time": m.last_sync_time.isoformat() if m.last_sync_time else None,
+                "sync_interval_seconds": m.sync_interval_seconds,
+                "record_count": m.record_count,
+                "status": m.status,
+                "error_message": m.error_message
+            })
+    except Exception as e:
+        pass
+    
+    return result
+
+
+@router.get("/database/test-connection")
+def test_database_connection():
+    results = {
+        "main_database": {"success": False, "latency_ms": None, "error": None},
+        "local_database": {"success": False, "latency_ms": None, "error": None}
+    }
+    
+    # 测试主数据库连接
+    import time
+    try:
+        start_time = time.time()
+        main_db = SessionLocal()
+        try:
+            main_db.execute(text("SELECT 1"))
+            latency = (time.time() - start_time) * 1000
+            results["main_database"]["success"] = True
+            results["main_database"]["latency_ms"] = round(latency, 2)
+        finally:
+            main_db.close()
+    except Exception as e:
+        results["main_database"]["error"] = str(e)
+    
+    # 测试本地数据库连接
+    try:
+        start_time = time.time()
+        local_db = next(get_local_db())
+        try:
+            local_db.execute(text("SELECT 1"))
+            latency = (time.time() - start_time) * 1000
+            results["local_database"]["success"] = True
+            results["local_database"]["latency_ms"] = round(latency, 2)
+        finally:
+            local_db.close()
+    except Exception as e:
+        results["local_database"]["error"] = str(e)
+    
+    return results

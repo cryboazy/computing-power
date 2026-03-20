@@ -17,6 +17,7 @@ computing-power/
 │   │   ├── aggregator.py   # 数据聚合服务
 │   │   ├── cache_sync.py   # 缓存同步服务
 │   │   ├── models.py       # PostgreSQL 数据模型
+│   │   ├── org_constants.py # 组织代码常量
 │   │   └── ...
 │   ├── data/               # 数据存储目录
 │   ├── sql/                # SQL 脚本
@@ -28,7 +29,12 @@ computing-power/
 ├── frontend/               # 前端服务 (Vue 3)
 │   ├── src/
 │   │   ├── components/    # Vue 组件
+│   │   │   ├── OrgDetailTabs/  # 组织详情标签页
+│   │   │   │   ├── DeviceDetailTab.vue
+│   │   │   │   └── UsageDetailTab.vue
+│   │   │   └── ...
 │   │   ├── api/           # API 调用
+│   │   ├── assets/        # 静态资源 (中国地图JSON)
 │   │   ├── composables/    # 组合式函数
 │   │   ├── styles/         # 全局样式
 │   │   └── themes/        # 主题配置
@@ -388,6 +394,18 @@ POST /api/cache/sync?force=true
 | `DeviceUsageDetailDialog.vue` | 设备详情弹窗 | 展示单个设备的详细使用情况 |
 | `ThemeSwitcher.vue` | 主题切换器 | 支持明暗主题切换 |
 | `PanelExpandContent.vue` | 面板展开内容 | 展示面板展开后的详细内容 |
+| `DeviceDetailTab.vue` | 设备详情标签 | 组织详情中的设备列表标签页 |
+| `UsageDetailTab.vue` | 使用详情标签 | 组织详情中的使用情况标签页 |
+
+### 组织代码常量
+
+系统使用以下组织代码常量（定义于 `backend/app/org_constants.py`）：
+
+| 常量 | 值 | 说明 |
+|------|-----|------|
+| `ORG_CODE_CHINA` | `CHINA` | 全国组织代码 |
+| `ORG_CODE_LOCAL` | `LOCAL` | 地方厅局组织代码 |
+| `ORG_CODE_MINISTRY` | `MINISTRY` | 部机关组织代码 |
 
 ### 数据分析维度
 
@@ -501,6 +519,29 @@ docker-compose up -d
 BACKEND_PORT=8002
 FRONTEND_PORT=5174
 ```
+
+## 安全注意事项
+
+### 默认管理员账户
+
+系统内置默认管理员账户，**首次部署后请立即修改密码**：
+
+| 账户 | 默认密码 | 说明 |
+|------|----------|------|
+| `admin` | `admin123` | 管理员账户 |
+
+### 生产环境安全建议
+
+1. **修改默认密码**: 首次登录后立即修改管理员密码
+2. **限制 CORS**: 在 `backend/main.py` 中将 `allow_origins` 设置为具体域名
+3. **使用 HTTPS**: 生产环境必须使用 HTTPS
+4. **保护环境变量**: 确保 `.env` 文件不被提交到版本控制
+5. **数据库安全**: 使用强密码，限制数据库访问 IP
+
+### 密码策略
+
+- 最小长度：6 位
+- 建议包含：大小写字母、数字、特殊字符
 
 ## 许可证
 
