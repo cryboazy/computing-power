@@ -232,7 +232,7 @@ class CacheSyncService:
         try:
             # 检查本地数据库是否已有字典数据
             existing_dicts = self.local_db.query(LocalPurposeDict).filter(
-                LocalPurposeDict.dict_type == self.PURPOSE_DICT_TYPE,
+                LocalPurposeDict.dict_type == PURPOSE_DICT_TYPE,
                 LocalPurposeDict.deleted == 0,
                 LocalPurposeDict.status == 1
             ).count()
@@ -248,7 +248,7 @@ class CacheSyncService:
                 for d in default_dicts:
                     local_dict = LocalPurposeDict(
                         id=d['id'],
-                        dict_type=self.PURPOSE_DICT_TYPE,
+                        dict_type=PURPOSE_DICT_TYPE,
                         dict_label=d['dict_label'],
                         dict_value=d['dict_value'],
                         dict_sort=d['dict_sort'],
