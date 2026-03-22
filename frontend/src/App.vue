@@ -83,7 +83,7 @@
           </button>
         </div>
       </template>
-      <PanelExpandContent 
+      <MultiOrgUsageDialog
         :panel-type="expandPanelType" 
         :sub-type="expandSubType" 
         :time-range="expandData.timeRange || 'month'"
@@ -179,7 +179,7 @@ import axios from 'axios'
 import LeftPanel from './components/LeftPanel.vue'
 import CenterPanel from './components/CenterPanel.vue'
 import RightPanel from './components/RightPanel.vue'
-import PanelExpandContent from './components/PanelExpandContent.vue'
+import MultiOrgUsageDialog from './components/MultiOrgUsageDialog.vue'
 import ThemeSwitcher from './components/ThemeSwitcher.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import OrgDetailDialog from './components/OrgDetailDialog.vue'

@@ -543,6 +543,30 @@ const getUsageColorArray = (dataArray) => {
   }))
 }
 
+const getTimeGrainFromRange = (timeRange) => {
+  const mapping = {
+    'month': 'day',
+    'quarter': 'week',
+    'half_year': 'month',
+    'year': 'month'
+  }
+  return mapping[timeRange] || 'day'
+}
+
+const getStartDateFromRange = (timeRange) => {
+  const today = new Date()
+  const mapping = {
+    'month': 30,
+    'quarter': 90,
+    'half_year': 180,
+    'year': 365
+  }
+  const days = mapping[timeRange] || 30
+  const startDate = new Date(today)
+  startDate.setDate(startDate.getDate() - days)
+  return startDate.toISOString().split('T')[0]
+}
+
 const overviewUsageColor = computed(() => getUsageColor(overviewStats.value.avg_gpu_usage))
 const localUsageColor = computed(() => getUsageColor(localStats.value.avg_gpu_usage))
 const centralUsageColor = computed(() => getUsageColor(centralStats.value.avg_gpu_usage))
@@ -1966,7 +1990,7 @@ const fetchData = async () => {
       dashboardApi.getCentralGpuTier(),
       dashboardApi.getCentralPurpose(),
       dashboardApi.getCentralTrend(timeType.value),
-      dashboardApi.getCarouselUsageTrend(timeType.value)
+      dashboardApi.getCarouselUsageTrend(timeType.value, null, null, getTimeGrainFromRange(globalTimeRange.value), getStartDateFromRange(globalTimeRange.value))
     ])
     
     overviewStats.value = stats
@@ -1986,6 +2010,7 @@ const fetchData = async () => {
     centralPurposeData.value = centralPurpose
     centralTrendData.value = centralTrend
     carouselData.value = carousel
+    console.log('[CenterPanel] Carousel data:', carousel, 'length:', carousel?.length)
   } catch (error) {
     console.error('Failed to fetch center panel data:', error)
   }

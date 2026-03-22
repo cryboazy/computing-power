@@ -60,11 +60,11 @@
             </div>
             <div class="filter-item">
               <label>单位名称</label>
-              <el-input 
-                v-model="carouselOrgName" 
-                placeholder="请输入单位名称" 
-                size="small" 
-                clearable 
+              <el-input
+                v-model="carouselOrgName"
+                placeholder="请输入单位名称"
+                size="small"
+                clearable
                 @keyup.enter="handleCarouselFilter"
                 @clear="handleCarouselFilter"
               >
@@ -72,6 +72,14 @@
                   <el-button icon="Search" @click="handleCarouselFilter" />
                 </template>
               </el-input>
+            </div>
+            <div class="filter-item">
+              <label>时间类型</label>
+              <el-radio-group v-model="carouselTimeType" size="small" @change="handleCarouselFilter">
+                <el-radio-button value="work">工作时间</el-radio-button>
+                <el-radio-button value="nonwork">非工作时间</el-radio-button>
+                <el-radio-button value="all">全部</el-radio-button>
+              </el-radio-group>
             </div>
             <div class="filter-item">
               <label>时间粒度</label>
@@ -97,12 +105,20 @@
             </div>
           </div>
           <div class="carousel-grid-wrapper">
-            <div class="carousel-grid">
+            <div v-if="carouselData.length === 0 && !loading" class="no-data-tip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="no-data-icon">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>暂无数据</span>
+            </div>
+            <div v-else class="carousel-grid">
               <div v-for="(item, index) in carouselData" :key="index" class="carousel-item">
                 <div class="carousel-title" @click="handleExpandCarouselTitleClick(item)">{{ item.org_name }}</div>
-                <v-chart 
-                  :option="getCarouselOption(item.trend)" 
-                  autoresize 
+                <v-chart
+                  :option="getCarouselOption(item.trend)"
+                  autoresize
                   @click="(params) => handleChartClick(params, item.org_name, item.org_id)"
                 />
               </div>
@@ -410,7 +426,55 @@ const carouselData = ref([])
 const carouselOrgType = ref('')
 const carouselOrgName = ref('')
 const carouselTimeGrain = ref('day')
+const carouselTimeType = ref('work')
 const carouselDateRange = ref(null)
+const carouselInitialized = ref(false)
+
+const getTimeGrainFromRange = (timeRange) => {
+  const mapping = {
+    'month': 'day',
+    'quarter': 'week',
+    'half_year': 'month',
+    'year': 'month'
+  }
+  return mapping[timeRange] || 'day'
+}
+
+const getStartDateFromRange = (timeRange) => {
+  const today = new Date()
+  const mapping = {
+    'month': 30,
+    'quarter': 90,
+    'half_year': 180,
+    'year': 365
+  }
+  const days = mapping[timeRange] || 30
+  const startDate = new Date(today)
+  startDate.setDate(startDate.getDate() - days)
+  return startDate.toISOString().split('T')[0]
+}
+
+const getDateRangeFromTimeRange = (timeRange) => {
+  const today = new Date()
+  const endDate = today.toISOString().split('T')[0]
+  const startDate = getStartDateFromRange(timeRange)
+  return [startDate, endDate]
+}
+
+const initDateRange = () => {
+  if (!carouselInitialized.value) {
+    if (props.timeRange) {
+      carouselDateRange.value = getDateRangeFromTimeRange(props.timeRange)
+      carouselTimeGrain.value = getTimeGrainFromRange(props.timeRange)
+    }
+    // 只在首次加载时同步全局时间类型
+    if (timeType && timeType.value) {
+      carouselTimeType.value = timeType.value
+    }
+    carouselInitialized.value = true
+  }
+}
+
 const drillDialogVisible = ref(false)
 const drillLoading = ref(false)
 const drillDate = ref('')
@@ -1294,20 +1358,24 @@ const fetchLeftPanelData = async () => {
 
 const fetchCenterPanelData = async () => {
   try {
-    const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
+    const startDate = carouselDateRange.value ? carouselDateRange.value[0] : getStartDateFromRange(props.timeRange)
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
+    const timeGrain = carouselDateRange.value ? carouselTimeGrain.value : getTimeGrainFromRange(props.timeRange)
+    console.log('[Carousel] Using timeRange:', props.timeRange, 'startDate:', startDate, 'timeGrain:', timeGrain)
+    console.log('[Carousel] Fetching data with timeType:', carouselTimeType.value, 'orgType:', carouselOrgType.value, 'timeGrain:', timeGrain)
     const [orgType, networkByOrg, gpuTierByOrg, purposeByOrg, carousel] = await Promise.all([
       dashboardApi.getOrgTypeDistribution(),
       dashboardApi.getNetworkDistributionByOrg(),
       dashboardApi.getGpuTierByOrgDistribution(),
       dashboardApi.getPurposeDistributionByOrg(),
-      dashboardApi.getCarouselUsageTrend('work', carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+      dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, timeGrain, startDate, endDate)
     ])
     
     orgTypeData.value = orgType
     networkByOrgData.value = networkByOrg
     gpuTierByOrgData.value = gpuTierByOrg
     purposeByOrgData.value = purposeByOrg
+    console.log('[Carousel] Received data:', carousel, 'length:', Array.isArray(carousel) ? carousel.length : 'not array')
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to fetch center panel data:', error)
@@ -1319,7 +1387,9 @@ const handleCarouselFilter = async () => {
   try {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
-    const carousel = await dashboardApi.getCarouselUsageTrend('work', carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    console.log('[Carousel Filter] timeType:', carouselTimeType.value)
+    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    console.log('[Carousel Filter] Received:', carousel)
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to filter carousel data:', error)
@@ -1333,7 +1403,7 @@ const handleTimeGrainChange = async () => {
   try {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
-    const carousel = await dashboardApi.getCarouselUsageTrend('work', carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to change time grain:', error)
@@ -1347,7 +1417,7 @@ const handleDateRangeChange = async () => {
   try {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
-    const carousel = await dashboardApi.getCarouselUsageTrend('work', carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to change date range:', error)
@@ -1368,7 +1438,7 @@ const handleChartClick = async (params, orgName, orgId) => {
       drillDialogVisible.value = true
       
       try {
-        const result = await dashboardApi.getCarouselUsageTrend('work', null, null, 'day', null, null, clickedDate, orgId)
+        const result = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, null, null, 'day', null, null, clickedDate, orgId)
         drillTrendData.value = result.trend || []
       } catch (error) {
         console.error('Failed to drill down:', error)
@@ -1404,7 +1474,12 @@ const fetchRightPanelData = async () => {
 
 const loadData = async () => {
   loading.value = true
-  
+
+  // 初始化日期范围
+  if (props.panelType === 'center') {
+    initDateRange()
+  }
+
   try {
     if (props.panelType === 'left') {
       await fetchLeftPanelData()
@@ -1469,7 +1544,7 @@ const handleExpandPurposeChartClick = (params) => {
 }
 
 watch(
-  () => [props.panelType, props.subType, props.timeRange, props.groupName, props.provinceName, timeType.value],
+  () => [props.panelType, props.subType, props.timeRange, props.groupName, props.provinceName, timeType.value, carouselTimeType.value],
   ([newPanelType, newSubType, newTimeRange, newGroupName, newProvinceName, newTimeType]) => {
     if (newPanelType && newSubType) {
       loadData()
@@ -1477,6 +1552,14 @@ watch(
   },
   { immediate: true }
 )
+
+// 监听时间类型变化，重新获取数据
+watch(carouselTimeType, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    console.log('[Carousel] Time type changed:', oldVal, '->', newVal)
+    handleCarouselFilter()
+  }
+})
 
 onMounted(() => {
 })
@@ -1685,22 +1768,43 @@ onMounted(() => {
       min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
-      
+
       &::-webkit-scrollbar {
         width: 8px;
       }
-      
+
       &::-webkit-scrollbar-track {
         background: var(--theme-shadow);
         border-radius: 4px;
       }
-      
+
       &::-webkit-scrollbar-thumb {
         background: var(--theme-border);
         border-radius: 4px;
-        
+
         &:hover {
           background: var(--theme-primary);
+        }
+      }
+
+      .no-data-tip {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        min-height: 300px;
+        color: var(--theme-text-muted);
+        gap: 15px;
+
+        .no-data-icon {
+          width: 48px;
+          height: 48px;
+          color: var(--theme-border);
+        }
+
+        span {
+          font-size: 14px;
         }
       }
     }
