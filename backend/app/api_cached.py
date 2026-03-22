@@ -15,10 +15,9 @@ from app.local_models import (
     LocalOrganization, LocalDevice, LocalGpuCardInfo, LocalNetwork,
     LocalCacheMetadata, LocalPurposeDict
 )
-from app.cache_sync import PURPOSE_DICT_TYPE
+from app.cache_sync import PURPOSE_DICT_TYPE, CacheSyncService, get_purpose_map
 from app.config import settings
 from app.org_constants import ORG_CODE_CHINA
-from app.cache_sync import CacheSyncService, get_purpose_map
 
 
 router = APIRouter()

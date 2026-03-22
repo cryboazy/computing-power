@@ -12,6 +12,9 @@ from app.local_models import (
 )
 
 
+PURPOSE_DICT_TYPE = 'device_purpose'
+
+
 class CacheSyncService:
     SYNC_INTERVALS = {
         'organization': 3600,
@@ -21,8 +24,6 @@ class CacheSyncService:
         'distribution_stats': 600,
         'purpose_dict': 3600,
     }
-    
-    PURPOSE_DICT_TYPE = 'device_purpose'
     
     def __init__(self, db: Session, local_db: Session):
         self.db = db
@@ -268,19 +269,19 @@ class CacheSyncService:
             self.local_db.rollback()
             self._update_metadata('purpose_dict', 'error', 0, str(e))
             raise
-    
+
     def get_purpose_map(self) -> Dict[int, str]:
         purpose_dicts = self.local_db.query(LocalPurposeDict).filter(
-            LocalPurposeDict.dict_type == self.PURPOSE_DICT_TYPE,
+            LocalPurposeDict.dict_type == PURPOSE_DICT_TYPE,
             LocalPurposeDict.deleted == 0,
             LocalPurposeDict.status == 1
         ).all()
-        
+
         if not purpose_dicts:
             return {1: "训练", 2: "研发", 3: "推理"}
-        
+
         return {d.dict_value: d.dict_label for d in purpose_dicts}
-    
+
     def sync_all_static_data(self, force: bool = False) -> Dict[str, int]:
         results = {}
         
@@ -353,6 +354,19 @@ class CacheSyncService:
             })
         
         return result
+
+
+def get_purpose_map(local_db: Session) -> Dict[int, str]:
+    purpose_dicts = local_db.query(LocalPurposeDict).filter(
+        LocalPurposeDict.dict_type == PURPOSE_DICT_TYPE,
+        LocalPurposeDict.deleted == 0,
+        LocalPurposeDict.status == 1
+    ).all()
+
+    if not purpose_dicts:
+        return {1: "训练", 2: "研发", 3: "推理"}
+
+    return {d.dict_value: d.dict_label for d in purpose_dicts}
 
 
 def run_cache_sync():
