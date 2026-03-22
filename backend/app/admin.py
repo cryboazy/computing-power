@@ -14,7 +14,7 @@ from sqlalchemy import func, text
 from app.local_database import get_local_db, LOCAL_DB_PATH, local_engine
 from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict, LocalCacheMetadata
 from app.aggregator import DataAggregator
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app import task_executor
 
 
