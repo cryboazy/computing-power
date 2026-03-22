@@ -15,29 +15,15 @@ from app.local_models import (
     LocalOrganization, LocalDevice, LocalGpuCardInfo, LocalNetwork,
     LocalCacheMetadata, LocalPurposeDict
 )
+from app.cache_sync import PURPOSE_DICT_TYPE
 from app.config import settings
 from app.org_constants import ORG_CODE_CHINA
-from app.cache_sync import CacheSyncService
+from app.cache_sync import CacheSyncService, get_purpose_map
 
 
 router = APIRouter()
 
 ONLINE_THRESHOLD_MINUTES = 10
-
-PURPOSE_DICT_TYPE = 'device_purpose'
-
-
-def get_purpose_map(local_db: Session) -> Dict[int, str]:
-    purpose_dicts = local_db.query(LocalPurposeDict).filter(
-        LocalPurposeDict.dict_type == PURPOSE_DICT_TYPE,
-        LocalPurposeDict.deleted == 0,
-        LocalPurposeDict.status == 1
-    ).all()
-    
-    if not purpose_dicts:
-        return {1: "训练", 2: "研发", 3: "推理"}
-    
-    return {d.dict_value: d.dict_label for d in purpose_dicts}
 
 
 def sqlite_date_format(column, format_str):
@@ -1585,20 +1571,7 @@ def get_carousel_usage_trend(
 
 @router.get("/cache/status")
 def get_cache_status(local_db: Session = Depends(get_local_db)):
-    metadatas = local_db.query(LocalCacheMetadata).all()
-    
-    result = []
-    for m in metadatas:
-        result.append({
-            'cache_name': m.cache_name,
-            'last_sync_time': m.last_sync_time.isoformat() if m.last_sync_time else None,
-            'sync_interval_seconds': m.sync_interval_seconds,
-            'record_count': m.record_count,
-            'status': m.status,
-            'error_message': m.error_message
-        })
-    
-    return result
+    return CacheSyncService(None, local_db).get_cache_status()
 
 
 @router.post("/cache/sync")
