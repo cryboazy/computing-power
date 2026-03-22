@@ -9,7 +9,8 @@ from app.admin import router as admin_router, set_aggregation_config_changed_cal
 from app.aggregator import DataAggregator
 from app.cache_sync import CacheSyncService
 from app.database import SessionLocal
-from app.local_database import init_local_db, LocalSessionLocal, LocalSystemConfig
+from app.local_database import init_local_db, LocalSessionLocal
+from app.local_models import LocalSystemConfig
 
 
 def get_auto_aggregation_config():
@@ -58,7 +59,11 @@ scheduler = BackgroundScheduler()
 
 
 def setup_aggregation_job():
-    enabled, hour, minute = get_auto_aggregation_config()
+    try:
+        enabled, hour, minute = get_auto_aggregation_config()
+    except Exception as e:
+        print(f"读取聚合配置失败，使用默认值: {e}")
+        enabled, hour, minute = True, 1, 0
 
     for job in scheduler.get_jobs():
         if job.id == "auto_aggregation":
@@ -71,6 +76,7 @@ def setup_aggregation_job():
         print("自动聚合任务已禁用")
 
 
+init_local_db()
 setup_aggregation_job()
 scheduler.add_job(scheduled_cache_sync, 'cron', hour='*', minute=5)
 
@@ -114,6 +120,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 生产环境应考虑限制 CORS
+# allow_origins=["https://your-domain.com"]
 
 app.include_router(api_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
