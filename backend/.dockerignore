@@ -10,10 +10,6 @@ venv/
 ENV/
 env/
 
-.env
-.env.local
-.env.*.local
-
 *.db
 *.sqlite
 *.sqlite3

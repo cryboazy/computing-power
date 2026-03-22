@@ -1,7 +1,5 @@
 .git
 .gitignore
-.env
-.env.*
 *.md
 node_modules
 __pycache__
