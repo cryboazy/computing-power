@@ -401,7 +401,7 @@
               <div class="chart-title">
                 GPU档次分布
               </div>
-              <v-chart :option="centralTrendOption" autoresize />
+              <v-chart :option="centralGpuTierOption" autoresize />
             </div>
             <div class="central-chart-item">
               <div class="chart-title">
@@ -816,7 +816,16 @@ const networkOption = computed(() => {
       axisPointer: { type: 'shadow' },
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
-      textStyle: { color: colors.text }
+      textStyle: { color: colors.text },
+      formatter: (params) => {
+        let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined && p.value !== 0) {
+            result += `${p.marker} ${p.seriesName}: <strong>${p.value}台</strong><br/>`
+          }
+        })
+        return result
+      }
     },
     legend: {
       data: networks,
@@ -940,7 +949,7 @@ const gpuTierOption = computed(() => {
         backgroundColor: colors.panelBgStart,
         borderColor: colors.border,
         textStyle: { color: colors.text },
-        formatter: '{b}: {c}张 ({d}%)'
+        formatter: '{b}: {c}台 ({d}%)'
       },
       legend: {
         data: tierNames,
@@ -961,7 +970,7 @@ const gpuTierOption = computed(() => {
           show: true,
           fontSize: 10,
           color: colors.textSecondary,
-          formatter: '{b}\n{c}张'
+          formatter: '{b}\n{c}台'
         },
         emphasis: {
           label: {
@@ -1022,6 +1031,16 @@ const gpuTierOption = computed(() => {
         label: {
           backgroundColor: colors.panelBgStart
         }
+      },
+      formatter: (params) => {
+        if (!params || params.length === 0) return ''
+        let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined) {
+            result += `${p.marker} ${p.seriesName}: <strong>${p.value}台</strong><br/>`
+          }
+        })
+        return result
       }
     },
     legend: {
@@ -1092,7 +1111,16 @@ const purposeOption = computed(() => {
       axisPointer: { type: 'shadow' },
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
-      textStyle: { color: colors.text }
+      textStyle: { color: colors.text },
+      formatter: (params) => {
+        let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
+        params.forEach(p => {
+          if (p.value !== null && p.value !== undefined && p.value !== 0) {
+            result += `${p.marker} ${p.seriesName}: <strong>${p.value}台</strong><br/>`
+          }
+        })
+        return result
+      }
     },
     legend: {
       data: purposes,
@@ -1345,7 +1373,7 @@ const localGpuTierOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}张 ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1361,7 +1389,7 @@ const localGpuTierOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}张'
+        formatter: '{b}\n{c}台'
       },
       emphasis: {
         label: {
@@ -1555,7 +1583,7 @@ const centralNetworkOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}张 ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1571,7 +1599,7 @@ const centralNetworkOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}张'
+        formatter: '{b}\n{c}台'
       },
       emphasis: {
         label: {
@@ -1605,7 +1633,7 @@ const centralGpuTierOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}张 ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1621,7 +1649,7 @@ const centralGpuTierOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}张'
+        formatter: '{b}\n{c}台'
       },
       emphasis: {
         label: {

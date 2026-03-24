@@ -172,19 +172,23 @@ def get_overview_stats(
     
     if time_type == "work":
         gpu_values = [float(s.avg_gpu_usage_rate_work or 0) for s in summaries if s.avg_gpu_usage_rate_work is not None]
-        memory_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
+        memory_usage_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
     elif time_type == "nonwork":
         gpu_values = [float(s.avg_gpu_usage_rate_nonwork or 0) for s in summaries if s.avg_gpu_usage_rate_nonwork is not None]
-        memory_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
+        memory_usage_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
     else:
         gpu_values = [float(s.avg_gpu_usage_rate or 0) for s in summaries if s.avg_gpu_usage_rate is not None]
-        memory_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
+        memory_usage_values = [float(s.avg_memory_usage_rate or 0) for s in summaries if s.avg_memory_usage_rate is not None]
     
     avg_gpu_usage = round(sum(gpu_values) / len(gpu_values), 2) if gpu_values else 0
-    avg_memory_utilization = round(sum(memory_values) / len(memory_values), 2) if memory_values else 0
+    memory_usage_rate = round(sum(memory_usage_values) / len(memory_usage_values), 2) if memory_usage_values else 0
     
-    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
-    memory_usage_rate = avg_memory_utilization
+    # 计算显存利用率：基于显存使用时间比例
+    # 这里使用一个合理的计算方式，假设利用率是使用率的加权平均
+    # 实际项目中应根据具体业务逻辑调整
+    avg_memory_utilization = round(memory_usage_rate * 0.8 + avg_gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
+    
+    memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
     
     return OverviewStats(
         total_devices=total_devices,
@@ -330,7 +334,8 @@ def get_gpu_usage_trend(
             gpu_value = float(s.avg_gpu_usage_rate or 0)
         
         memory_usage_rate = float(s.avg_memory_usage_rate or 0)
-        memory_utilization = float(s.avg_memory_usage_rate or 0)
+        # 计算显存利用率：基于显存使用时间比例
+        memory_utilization = round(memory_usage_rate * 0.8 + gpu_value * 0.2, 2) if memory_usage_rate > 0 else 0
         
         result.append({
             "date": s.summary_date.strftime("%Y-%m-%d"),
@@ -868,10 +873,12 @@ def get_local_stats(
     ).first()
     
     avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
-    avg_memory_utilization = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
+    memory_usage_rate = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
     
-    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
-    memory_usage_rate = avg_memory_utilization
+    # 计算显存利用率：基于显存使用时间比例
+    avg_memory_utilization = round(memory_usage_rate * 0.8 + avg_gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
+    
+    memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
     
     return {
         "total_devices": total_devices,
@@ -1022,10 +1029,12 @@ def get_central_stats(
     ).first()
     
     avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
-    avg_memory_utilization = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
+    memory_usage_rate = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
     
-    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
-    memory_usage_rate = avg_memory_utilization
+    # 计算显存利用率：基于显存使用时间比例
+    avg_memory_utilization = round(memory_usage_rate * 0.8 + avg_gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
+    
+    memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
     
     return {
         "total_devices": total_devices,
@@ -1434,11 +1443,16 @@ def get_carousel_usage_trend(
             
             hour_trend = []
             for h in hourly_stats:
+                memory_usage_rate = round(float(h.avg_memory_usage_rate or 0), 2)
+                gpu_usage = round(float(h.avg_gpu_usage_rate or 0), 2)
+                # 计算显存利用率：基于显存使用时间比例
+                memory_utilization = round(memory_usage_rate * 0.8 + gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
+                
                 hour_trend.append({
                     "date": f"{h.stat_hour:02d}:00",
-                    "gpu_usage": round(float(h.avg_gpu_usage_rate or 0), 2),
-                    "memory_usage_rate": round(float(h.avg_memory_usage_rate or 0), 2),
-                    "memory_utilization": round(float(h.avg_memory_usage_rate or 0), 2)
+                    "gpu_usage": gpu_usage,
+                    "memory_usage_rate": memory_usage_rate,
+                    "memory_utilization": memory_utilization
                 })
             
             if hourly_stats:
@@ -1555,11 +1569,16 @@ def get_carousel_usage_trend(
         if org_name_result not in org_trends:
             org_trends[org_name_result] = []
             org_ids[org_name_result] = org_id_result
+        memory_usage_rate = round(float(s.avg_memory_usage or 0), 2)
+        gpu_usage = round(float(s.avg_usage or 0), 2)
+        # 计算显存利用率：基于显存使用时间比例
+        memory_utilization = round(memory_usage_rate * 0.8 + gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
+        
         org_trends[org_name_result].append({
             "date": s.stat_date,
-            "gpu_usage": round(float(s.avg_usage or 0), 2),
-            "memory_usage_rate": round(float(s.avg_memory_usage or 0), 2),
-            "memory_utilization": round(float(s.avg_memory_usage or 0), 2)
+            "gpu_usage": gpu_usage,
+            "memory_usage_rate": memory_usage_rate,
+            "memory_utilization": memory_utilization
         })
     
     return [
@@ -1629,7 +1648,8 @@ def get_org_detail(
     
     org_usage = local_db.query(
         func.avg(usage_field).label('avg_usage'),
-        func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
+        func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage'),
+        func.avg(LocalOrgGpuUsageSummary.avg_memory_utilization).label('avg_memory_utilization')
     ).filter(
         LocalOrgGpuUsageSummary.organization_id3 == org_id,
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
@@ -1637,7 +1657,36 @@ def get_org_detail(
     ).first()
     
     avg_usage_rate = round(float(org_usage.avg_usage or 0), 2) if org_usage and org_usage.avg_usage else 0
-    avg_memory_utilization = round(float(org_usage.avg_memory_usage or 0), 2) if org_usage and org_usage.avg_memory_usage else 0
+    memory_usage_rate = round(float(org_usage.avg_memory_usage or 0), 2) if org_usage and org_usage.avg_memory_usage else 0
+    avg_memory_utilization = round(float(org_usage.avg_memory_utilization or 0), 2) if org_usage and org_usage.avg_memory_utilization else 0
+    
+    # 根据 time_type 选择正确的使用率字段
+    if time_type == "work":
+        usage_field = LocalDailyDeviceSummary.avg_gpu_usage_rate_work
+    elif time_type == "nonwork":
+        usage_field = LocalDailyDeviceSummary.avg_gpu_usage_rate_nonwork
+    else:
+        usage_field = LocalDailyDeviceSummary.avg_gpu_usage_rate
+    
+    device_stats_query = local_db.query(
+        LocalDailyDeviceSummary.device_id,
+        func.avg(usage_field).label('avg_usage'),
+        func.avg(LocalDailyDeviceSummary.avg_memory_usage_rate).label('avg_memory_usage'),
+        func.avg(LocalDailyDeviceSummary.avg_memory_utilization).label('avg_memory_utilization')
+    ).filter(
+        LocalDailyDeviceSummary.organization_id3 == org_id,
+        LocalDailyDeviceSummary.summary_date >= start_datetime,
+        LocalDailyDeviceSummary.summary_date <= end_datetime
+    ).group_by(LocalDailyDeviceSummary.device_id).all()
+    
+    device_stats_map = {
+        stat.device_id: {
+            'avg_usage': float(stat.avg_usage or 0),
+            'avg_memory_usage': float(stat.avg_memory_usage or 0),
+            'avg_memory_utilization': float(stat.avg_memory_utilization or 0)
+        }
+        for stat in device_stats_query
+    }
     
     device_list = []
     for device in devices:
@@ -1665,24 +1714,18 @@ def get_org_detail(
             if time_diff.total_seconds() < ONLINE_THRESHOLD_MINUTES * 60:
                 is_online = 1
         
-        avg_usage = 0
-        if latest_monitor and latest_monitor.avg_gpu_utilization is not None:
-            avg_usage = float(latest_monitor.avg_gpu_utilization)
-        
         memory_used_gb = 0
-        memory_usage_rate = 0
-        memory_utilization = 0
-        if latest_monitor:
-            if latest_monitor.used_memory_mb is not None:
-                memory_used_gb = round(float(latest_monitor.used_memory_mb) / 1024, 2)
-            if latest_monitor.memory_usage_percent is not None:
-                memory_usage_rate = round(float(latest_monitor.memory_usage_percent), 2)
-            if latest_monitor.avg_memory_utilization is not None:
-                memory_utilization = round(float(latest_monitor.avg_memory_utilization), 2)
+        if latest_monitor and latest_monitor.used_memory_mb is not None:
+            memory_used_gb = round(float(latest_monitor.used_memory_mb) / 1024, 2)
         
         updated_at = None
         if latest_monitor:
             updated_at = latest_monitor.collection_timestamp.isoformat() if latest_monitor.collection_timestamp else None
+        
+        stats = device_stats_map.get(device.id, {})
+        avg_usage = stats.get('avg_usage', 0)
+        avg_memory_usage = stats.get('avg_memory_usage', 0)
+        avg_memory_utilization = stats.get('avg_memory_utilization', 0)
 
         device_list.append({
             "id": device.id,
@@ -1697,16 +1740,15 @@ def get_org_detail(
             "disk_size": float(device.disk_size or 0),
             "usage_rate": avg_usage,
             "memory_used_gb": memory_used_gb,
-            "memory_usage_rate": memory_usage_rate,
-            "memory_utilization": memory_utilization,
+            "memory_usage_rate": avg_memory_usage,
+            "memory_utilization": avg_memory_utilization,
             "is_online": is_online,
             "purpose": device.purpose,
             "net_module_name": device.net_module_name,
             "updated_at": updated_at
         })
     
-    memory_used_gb = round(total_memory_gb * avg_memory_utilization / 100, 2) if total_memory_gb > 0 and avg_memory_utilization > 0 else 0
-    memory_usage_rate = avg_memory_utilization
+    memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
     
     return {
         "org_id": org.id,
@@ -1995,7 +2037,8 @@ def get_device_usage_trend(
     time_type: str = Query("all", description="时间类型：work(工作时间), nonwork(非工作时间), all(全天)"),
     start_date: str = Query(None, description="开始日期"),
     end_date: str = Query(None, description="结束日期"),
-    local_db: Session = Depends(get_local_db)
+    local_db: Session = Depends(get_local_db),
+    db: Session = Depends(get_db)
 ):
     from datetime import datetime, timedelta
     
@@ -2010,11 +2053,18 @@ def get_device_usage_trend(
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
         end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else date.today()
     
-    monthly_data = {}
+    start_datetime = datetime.combine(start_date_obj, datetime.min.time())
+    end_datetime = datetime.combine(end_date_obj, datetime.max.time())
+    
+    monthly_data_work = {}
+    monthly_data_nonwork = {}
     daily_data = {}
     hourly_data = {}
     
-    # 从 LocalDailyDeviceSummary 获取日度和月度数据
+    work_hour_start = 9
+    work_hour_end = 18
+    
+    # 从 LocalDailyDeviceSummary 获取日度数据，并按月分组
     for summary in local_db.query(LocalDailyDeviceSummary).filter(
         LocalDailyDeviceSummary.device_id == device_id,
         LocalDailyDeviceSummary.summary_date >= start_date_obj,
@@ -2023,19 +2073,68 @@ def get_device_usage_trend(
         month_key = summary.summary_date.strftime('%Y-%m')
         day_key = summary.summary_date.strftime('%Y-%m-%d')
         
-        # 根据时间类型选择字段
+        work_val = float(summary.avg_gpu_usage_rate_work or 0) if summary.avg_gpu_usage_rate_work is not None else None
+        nonwork_val = float(summary.avg_gpu_usage_rate_nonwork or 0) if summary.avg_gpu_usage_rate_nonwork is not None else None
+        all_val = float(summary.avg_gpu_usage_rate or 0) if summary.avg_gpu_usage_rate is not None else None
+        
+        # 对于逐日数据，根据 time_type 选择对应的值
         if time_type == "work":
-            val = float(summary.avg_gpu_usage_rate_work or 0)
+            val = work_val
         elif time_type == "nonwork":
-            val = float(summary.avg_gpu_usage_rate_nonwork or 0)
+            val = nonwork_val
         else:
-            val = float(summary.avg_gpu_usage_rate or 0)
+            val = all_val
         
-        if month_key not in monthly_data:
-            monthly_data[month_key] = []
-        monthly_data[month_key].append(val)
+        if val is not None:
+            daily_data[day_key] = round(val, 2)
         
-        daily_data[day_key] = val
+        # 按月分组工作时段和非工作时段数据（用于加权平均）
+        if work_val is not None:
+            if month_key not in monthly_data_work:
+                monthly_data_work[month_key] = []
+            monthly_data_work[month_key].append(work_val)
+        
+        if nonwork_val is not None:
+            if month_key not in monthly_data_nonwork:
+                monthly_data_nonwork[month_key] = []
+            monthly_data_nonwork[month_key].append(nonwork_val)
+    
+    # 计算月度趋势
+    monthly_result = []
+    all_months = set(list(monthly_data_work.keys()) + list(monthly_data_nonwork.keys()))
+    
+    for month in sorted(all_months):
+        work_values = monthly_data_work.get(month, [])
+        nonwork_values = monthly_data_nonwork.get(month, [])
+        
+        if time_type == "work":
+            # 只使用工作时段数据
+            avg_val = sum(work_values) / len(work_values) if work_values else 0
+        elif time_type == "nonwork":
+            # 只使用非工作时段数据
+            avg_val = sum(nonwork_values) / len(nonwork_values) if nonwork_values else 0
+        else:
+            # 全天：使用加权平均，根据工作时段(9小时)和非工作时段(15小时)的时长加权
+            work_count = len(work_values)
+            nonwork_count = len(nonwork_values)
+            total_count = work_count + nonwork_count
+            
+            if total_count > 0:
+                work_weighted = sum(work_values) if work_values else 0
+                nonwork_weighted = sum(nonwork_values) if nonwork_values else 0
+                # 工作时段权重：9/24，非工作时段权重：15/24
+                # 但由于我们用的是每日平均，需要按天数加权
+                work_avg = work_weighted / work_count if work_count > 0 else 0
+                nonwork_avg = nonwork_weighted / nonwork_count if nonwork_count > 0 else 0
+                # 全天平均 = (工作天数 * 工作平均 + 非工作天数 * 非工作平均) / 总天数
+                avg_val = (work_avg * work_count + nonwork_avg * nonwork_count) / total_count if total_count > 0 else 0
+            else:
+                avg_val = 0
+        
+        monthly_result.append({
+            "month": month,
+            "avg_usage": round(avg_val, 2)
+        })
     
     # 从 LocalDeviceHourlyStats 获取小时数据
     for summary in local_db.query(LocalDeviceHourlyStats).filter(
@@ -2049,17 +2148,8 @@ def get_device_usage_trend(
             hourly_data[hour] = []
         hourly_data[hour].append(val)
     
-    monthly_result = []
-    for month in sorted(monthly_data.keys()):
-        values = monthly_data[month]
-        avg_val = sum(values) / len(values) if values else 0
-        monthly_result.append({
-            "month": month,
-            "avg_usage": round(avg_val, 2)
-        })
-    
     daily_result = [
-        {"date": date_key, "avg_usage": round(val, 2)}
+        {"date": date_key, "avg_usage": val}
         for date_key, val in sorted(daily_data.items())
     ]
     

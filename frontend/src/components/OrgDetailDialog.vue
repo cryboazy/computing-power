@@ -162,8 +162,8 @@ import { ref, watch, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning } from '@element-plus/icons-vue'
 import { dashboardApi } from '../api'
-import DeviceDetailTab from './OrgDetailTabs/DeviceDetailTab.vue'
-import UsageDetailTab from './OrgDetailTabs/UsageDetailTab.vue'
+import DeviceDetailTab from './DeviceDetailTab.vue'
+import UsageDetailTab from './UsageDetailTab.vue'
 
 const props = defineProps({
   visible: {

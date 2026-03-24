@@ -52,8 +52,8 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent } from 'echarts/components'
-import { dashboardApi } from '../../api'
-import { useTheme } from '../../composables/useTheme'
+import { dashboardApi } from '../api'
+import { useTheme } from '../composables/useTheme'
 
 use([
   CanvasRenderer,

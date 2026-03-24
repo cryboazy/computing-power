@@ -199,7 +199,8 @@ class DataAggregator:
         for device in devices:
             result = self.db.query(
                 func.avg(DeviceGpuMonitor.avg_gpu_utilization).label("avg_usage"),
-                func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage")
+                func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage"),
+                func.avg(DeviceGpuMonitor.avg_memory_utilization).label("avg_memory_utilization")
             ).filter(
                 DeviceGpuMonitor.device_id == device.id,
                 DeviceGpuMonitor.collection_timestamp >= start_time,
@@ -208,7 +209,8 @@ class DataAggregator:
             
             result_work = self.db.query(
                 func.avg(DeviceGpuMonitor.avg_gpu_utilization).label("avg_usage"),
-                func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage")
+                func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage"),
+                func.avg(DeviceGpuMonitor.avg_memory_utilization).label("avg_memory_utilization")
             ).filter(
                 DeviceGpuMonitor.device_id == device.id,
                 DeviceGpuMonitor.collection_timestamp >= start_time,
@@ -219,7 +221,8 @@ class DataAggregator:
             
             result_nonwork = self.db.query(
                 func.avg(DeviceGpuMonitor.avg_gpu_utilization).label("avg_usage"),
-                func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage")
+                func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage"),
+                func.avg(DeviceGpuMonitor.avg_memory_utilization).label("avg_memory_utilization")
             ).filter(
                 DeviceGpuMonitor.device_id == device.id,
                 DeviceGpuMonitor.collection_timestamp >= start_time,
@@ -272,6 +275,7 @@ class DataAggregator:
                 summary.avg_gpu_usage_rate_work = round(float(result_work.avg_usage or 0), 2)
                 summary.avg_gpu_usage_rate_nonwork = round(float(result_nonwork.avg_usage or 0), 2)
                 summary.avg_memory_usage_rate = round(float(result.avg_memory_usage or 0), 2)
+                summary.avg_memory_utilization = round(float(result.avg_memory_utilization or 0), 2)
                 
                 if not existing:
                     self.local_db.add(summary)
@@ -296,7 +300,8 @@ class DataAggregator:
                 device_stats = self.db.query(
                     DeviceGpuMonitor.device_id,
                     func.avg(DeviceGpuMonitor.avg_gpu_utilization).label("device_avg_usage"),
-                    func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage")
+                    func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage"),
+                    func.avg(DeviceGpuMonitor.avg_memory_utilization).label("avg_memory_utilization")
                 ).filter(
                     DeviceGpuMonitor.device_id == device.id,
                     DeviceGpuMonitor.collection_timestamp >= hour_start,
@@ -308,10 +313,12 @@ class DataAggregator:
                 device_count = 0
                 avg_gpu_usage = 0
                 avg_memory_usage = 0
+                avg_memory_utilization = 0
                 if device_stats and device_stats.device_avg_usage is not None:
                     device_count = 1
                     avg_gpu_usage = round(float(device_stats.device_avg_usage or 0), 2)
                     avg_memory_usage = round(float(device_stats.avg_memory_usage or 0), 2)
+                    avg_memory_utilization = round(float(device_stats.avg_memory_utilization or 0), 2)
                 
                 is_work_hour = 1 if self.work_hour_start <= hour < self.work_hour_end else 0
                 
@@ -343,6 +350,7 @@ class DataAggregator:
                     
                     stat.avg_gpu_usage_rate = avg_gpu_usage
                     stat.avg_memory_usage_rate = avg_memory_usage
+                    stat.avg_memory_utilization = avg_memory_utilization
                     stat.device_count = device_count
                     stat.is_work_hour = is_work_hour
                     
@@ -432,6 +440,7 @@ class DataAggregator:
                 func.count(func.distinct(DeviceGpuMonitor.device_id)).label("device_count"),
                 func.sum(DeviceGpuMonitor.gpu_count).label("gpu_count"),
                 func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage"),
+                func.avg(DeviceGpuMonitor.avg_memory_utilization).label("avg_memory_utilization"),
                 func.max(DeviceGpuMonitor.max_gpu_utilization).label("max_gpu_usage"),
                 func.min(DeviceGpuMonitor.min_gpu_utilization).label("min_gpu_usage"),
                 func.max(DeviceGpuMonitor.collection_timestamp).label("latest_time")
@@ -479,6 +488,7 @@ class DataAggregator:
                 summary.gpu_count = result.gpu_count or 0
                 summary.avg_gpu_usage_rate = avg_gpu_usage
                 summary.avg_memory_usage_rate = round(float(result.avg_memory_usage or 0), 2)
+                summary.avg_memory_utilization = round(float(result.avg_memory_utilization or 0), 2)
                 summary.max_gpu_usage_rate = round(float(result.max_gpu_usage or 0), 2)
                 summary.min_gpu_usage_rate = round(float(result.min_gpu_usage or 0), 2)
                 summary.latest_collection_time = result.latest_time
@@ -625,7 +635,8 @@ class DataAggregator:
                 device_stats = self.db.query(
                     DeviceGpuMonitor.device_id,
                     func.avg(DeviceGpuMonitor.avg_gpu_utilization).label("device_avg_usage"),
-                    func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage")
+                    func.avg(DeviceGpuMonitor.memory_usage_percent).label("avg_memory_usage"),
+                    func.avg(DeviceGpuMonitor.avg_memory_utilization).label("avg_memory_utilization")
                 ).filter(
                     DeviceGpuMonitor.device_id.in_(device_ids),
                     DeviceGpuMonitor.collection_timestamp >= hour_start,
@@ -637,8 +648,10 @@ class DataAggregator:
                 device_count = len(device_stats)
                 total_device_avg_usage = sum(float(d.device_avg_usage or 0) for d in device_stats)
                 total_device_avg_memory = sum(float(d.avg_memory_usage or 0) for d in device_stats)
+                total_device_avg_memory_utilization = sum(float(d.avg_memory_utilization or 0) for d in device_stats)
                 avg_gpu_usage = round(total_device_avg_usage / device_count, 2) if device_count > 0 else 0
                 avg_memory_usage = round(total_device_avg_memory / device_count, 2) if device_count > 0 else 0
+                avg_memory_utilization = round(total_device_avg_memory_utilization / device_count, 2) if device_count > 0 else 0
                 
                 is_work_hour = 1 if self.work_hour_start <= hour < self.work_hour_end else 0
                 
@@ -661,6 +674,7 @@ class DataAggregator:
                     
                     stat.avg_gpu_usage_rate = avg_gpu_usage
                     stat.avg_memory_usage_rate = avg_memory_usage
+                    stat.avg_memory_utilization = avg_memory_utilization
                     stat.device_count = device_count
                     stat.is_work_hour = is_work_hour
                     

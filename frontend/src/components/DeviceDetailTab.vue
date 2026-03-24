@@ -95,18 +95,27 @@
     
     <div v-else class="charts-grid-standalone">
       <div class="chart-card">
+        <div class="chart-header">
+          <h4>GPU档次分布</h4>
+        </div>
         <div class="chart-wrapper">
           <v-chart :option="gpuTierPieOption" autoresize />
         </div>
       </div>
       
       <div class="chart-card">
+        <div class="chart-header">
+          <h4>运行网络分布</h4>
+        </div>
         <div class="chart-wrapper">
           <v-chart :option="networkPieOption" autoresize />
         </div>
       </div>
       
       <div class="chart-card">
+        <div class="chart-header">
+          <h4>用途分布</h4>
+        </div>
         <div class="chart-wrapper">
           <v-chart :option="purposePieOption" autoresize />
         </div>
@@ -232,7 +241,7 @@
         </el-table-column>
         <el-table-column
           prop="usage_rate"
-          label="最近使用率(%)"
+          label="GPU使用率(%)"
           width="140"
           sortable
           align="center"
@@ -331,9 +340,9 @@ import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { PieChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
-import { dashboardApi } from '../../api'
-import { useTheme } from '../../composables/useTheme'
-import DeviceUsageDetailDialog from '../DeviceUsageDetailDialog.vue'
+import { dashboardApi } from '../api'
+import { useTheme } from '../composables/useTheme'
+import DeviceUsageDetailDialog from './DeviceUsageDetailDialog.vue'
 
 use([
   CanvasRenderer,
@@ -538,7 +547,7 @@ const createPieOption = (data) => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c} ({d}%)'
+      formatter: '{b}: {c}台 ({d}%)'
     },
     legend: {
       orient: 'vertical',
@@ -564,7 +573,7 @@ const createPieOption = (data) => {
       label: {
         show: true,
         position: 'outside',
-        formatter: '{b}: {c}\n{d}%',
+        formatter: '{b}: {c}台\n{d}%',
         color: colors.textSecondary,
         fontSize: 10
       },
@@ -599,7 +608,9 @@ const createBarOption = (data) => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}'
+      formatter: (params) => {
+        return `${params[0].axisValue}: ${params[0].value}台`
+      }
     },
     grid: {
       left: '3%',
@@ -635,7 +646,7 @@ const createBarOption = (data) => {
           },
           borderRadius: [0, 4, 4, 0]
         },
-        label: { show: true, position: 'right', formatter: '{c}', color: colors.textSecondary, fontSize: 10 }
+        label: { show: true, position: 'right', formatter: '{c}台', color: colors.textSecondary, fontSize: 10 }
       }))
     }]
   }
@@ -793,8 +804,21 @@ onMounted(() => {
     border-radius: 12px;
     overflow: hidden;
     
+    .chart-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--theme-border);
+      background: linear-gradient(90deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
+      
+      h4 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--theme-text);
+      }
+    }
+    
     .chart-wrapper {
-      height: 220px;
+      height: 200px;
       padding: 12px;
       
       :deep(.echarts) {
