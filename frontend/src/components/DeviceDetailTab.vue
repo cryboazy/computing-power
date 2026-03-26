@@ -1,6 +1,6 @@
 <template>
   <div class="device-detail-tab">
-    <div class="stats-cards">
+    <div class="stats-row">
       <div class="stat-card">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -10,44 +10,34 @@
           </svg>
         </div>
         <div class="stat-content">
+          <div class="stat-label">设备总数<span class="stat-unit-text">（台）</span></div>
           <div class="stat-value">{{ orgDetail?.total_devices || 0 }}</div>
-          <div class="stat-label">设备总数</div>
         </div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
-            <rect x="9" y="9" width="6" height="6"></rect>
-            <line x1="9" y1="1" x2="9" y2="4"></line>
-            <line x1="15" y1="1" x2="15" y2="4"></line>
-            <line x1="9" y1="20" x2="9" y2="23"></line>
-            <line x1="15" y1="20" x2="15" y2="23"></line>
-            <line x1="20" y1="9" x2="23" y2="9"></line>
-            <line x1="20" y1="14" x2="23" y2="14"></line>
-            <line x1="1" y1="9" x2="4" y2="9"></line>
-            <line x1="1" y1="14" x2="4" y2="14"></line>
+            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+            <path d="M2 17l10 5 10-5"></path>
+            <path d="M2 12l10 5 10-5"></path>
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ orgDetail?.total_memory_gb || 0 }} <span class="unit">GB</span></div>
-          <div class="stat-label">显存总量</div>
+          <div class="stat-label">显存总量<span class="stat-unit-text">（GB）</span></div>
+          <div class="stat-value">{{ formatNumber(orgDetail?.total_memory_gb || 0) }}</div>
         </div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ orgDetail?.total_compute_tflops || 0 }} <span class="unit">TFLOPS</span></div>
-          <div class="stat-label">总算力</div>
+          <div class="stat-label">总算力<span class="stat-unit-text">（PF）</span></div>
+          <div class="stat-value">{{ formatNumber((orgDetail?.total_compute_tflops || 0) / 1000, 2) }}</div>
         </div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -55,11 +45,10 @@
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ orgDetail?.avg_usage_rate || 0 }} <span class="unit">%</span></div>
-          <div class="stat-label">平均使用率</div>
+          <div class="stat-label">平均使用率<span class="stat-unit-text">（%）</span></div>
+          <div class="stat-value">{{ formatNumber(orgDetail?.avg_usage_rate || 0, 2) }}</div>
         </div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -68,11 +57,10 @@
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value" :title="`显存已用量: ${formatNumber(orgDetail?.memory_used_gb || 0)} GB`">{{ orgDetail?.memory_usage_rate || 0 }} <span class="unit">%</span></div>
-          <div class="stat-label">显存使用率</div>
+          <div class="stat-label">显存使用率<span class="stat-unit-text">（%）</span></div>
+          <div class="stat-value" :title="`显存已用量: ${formatNumber(orgDetail?.memory_used_gb || 0)} GB`">{{ formatNumber(orgDetail?.memory_usage_rate || 0, 2) }}</div>
         </div>
       </div>
-      
       <div class="stat-card">
         <div class="stat-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -82,8 +70,8 @@
           </svg>
         </div>
         <div class="stat-content">
-          <div class="stat-value">{{ orgDetail?.avg_memory_utilization || 0 }} <span class="unit">%</span></div>
-          <div class="stat-label">显存利用率</div>
+          <div class="stat-label">显存利用率<span class="stat-unit-text">（%）</span></div>
+          <div class="stat-value">{{ formatNumber(orgDetail?.avg_memory_utilization || 0, 2) }}</div>
         </div>
       </div>
     </div>
@@ -714,72 +702,68 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
+.stats-row {
+  display: flex;
+  gap: 10px;
   flex-shrink: 0;
-  overflow: visible;
-  padding: 2px;
-  
+
   .stat-card {
+    flex: 1;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: linear-gradient(135deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
-    border: 1px solid var(--theme-border);
-    border-radius: 10px;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--theme-shadow);
+    border: 1px solid var(--theme-border-light);
+    border-radius: 8px;
     transition: all 0.3s ease;
-    
+
     &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px var(--theme-glow);
-      border-color: var(--theme-primary);
+      border-color: var(--theme-secondary);
+      box-shadow: 0 0 10px var(--theme-glow);
     }
-    
+
     .stat-icon {
-      width: 48px;
-      height: 48px;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-secondary) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-secondary) 100%);
-      border-radius: 10px;
-      box-shadow: 0 4px 10px var(--theme-glow);
-      
+      flex-shrink: 0;
+
       svg {
-        width: 24px;
-        height: 24px;
+        width: 18px;
+        height: 18px;
         color: white;
       }
     }
-    
+
     .stat-content {
       flex: 1;
-      
-      .stat-value {
-        font-size: 24px;
-        font-weight: 700;
-        background: linear-gradient(90deg, var(--theme-primary) 0%, var(--theme-secondary) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        line-height: 1.2;
-        
-        .unit {
-          font-size: 12px;
-          font-weight: 500;
-        }
-      }
-      
+      min-width: 0;
+
       .stat-label {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--theme-text-secondary);
-        margin-top: 2px;
+        margin-bottom: 2px;
+      }
+
+      .stat-value {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--theme-text);
+        line-height: 1.2;
       }
     }
   }
+}
+
+.stat-unit-text {
+  font-size: 10px;
+  font-weight: normal;
+  color: var(--theme-text-muted);
 }
 
 .distribution-loading {

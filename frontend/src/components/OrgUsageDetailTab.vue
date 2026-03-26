@@ -82,6 +82,8 @@ const props = defineProps({
 })
 
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
+const globalNetworkFilter = inject('globalNetworkFilter')
+const networkList = inject('networkList')
 const { getAllColors } = useTheme()
 
 const getUsageColor = (value) => {
@@ -152,15 +154,12 @@ const fetchData = async () => {
       endDate = props.dateRange[1]
     }
     
-    const apiParams = { timeType: 'all', startDate, endDate }
-    if (props.purpose) {
-      apiParams.purpose = props.purpose
-    }
+    const network = globalNetworkFilter?.value === 'all' ? null : globalNetworkFilter?.value
     
     const [dataAll, dataWork, dataNonwork] = await Promise.all([
-      dashboardApi.getOrgUsageTrend(props.orgId, 'all', startDate, endDate, props.purpose),
-      dashboardApi.getOrgUsageTrend(props.orgId, 'work', startDate, endDate, props.purpose),
-      dashboardApi.getOrgUsageTrend(props.orgId, 'nonwork', startDate, endDate, props.purpose)
+      dashboardApi.getOrgUsageTrend(props.orgId, 'all', startDate, endDate, props.purpose, network),
+      dashboardApi.getOrgUsageTrend(props.orgId, 'work', startDate, endDate, props.purpose, network),
+      dashboardApi.getOrgUsageTrend(props.orgId, 'nonwork', startDate, endDate, props.purpose, network)
     ])
     
     usageDataAll.value = dataAll
@@ -446,6 +445,12 @@ watch(() => props.dateRange, (newVal) => {
 }, { deep: true })
 
 watch(() => props.purpose, (newVal) => {
+  if (props.orgId) {
+    fetchData()
+  }
+})
+
+watch(() => globalNetworkFilter?.value, () => {
   if (props.orgId) {
     fetchData()
   }

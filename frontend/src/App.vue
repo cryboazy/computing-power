@@ -14,6 +14,42 @@
       <div class="header-right">
         <span class="time">{{ currentTime }}</span>
         <el-select 
+          v-model="globalNetworkFilter" 
+          class="network-select"
+          size="small"
+          placeholder="选择网络分类"
+          :loading="networkLoading"
+        >
+          <el-option
+            label="全部网络"
+            value="all"
+          />
+          <el-option
+            v-for="network in networkList"
+            :key="network.code"
+            :label="network.name"
+            :value="network.code"
+          />
+        </el-select>
+        <el-select 
+          v-model="globalPurposeFilter" 
+          class="purpose-select"
+          size="small"
+          placeholder="设备用途"
+          :loading="purposeLoading"
+        >
+          <el-option
+            label="全部用途"
+            value="all"
+          />
+          <el-option
+            v-for="purpose in purposeList"
+            :key="purpose.dict_value"
+            :label="purpose.dict_label"
+            :value="String(purpose.dict_value)"
+          />
+        </el-select>
+        <el-select 
           v-model="timeType" 
           class="time-type-select"
           size="small"
@@ -63,6 +99,7 @@
       :show-close="false"
       class="expand-dialog"
       append-to-body
+      :fullscreen="isExpandMaximized"
     >
       <template #header>
         <div class="dialog-header">
@@ -75,12 +112,22 @@
             <span class="decoration-dot"></span>
             <span class="decoration-line"></span>
           </div>
-          <button class="close-btn" @click="expandVisible = false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+          <div class="window-controls">
+            <button class="control-btn" @click="toggleExpandMaximize" :title="isExpandMaximized ? '还原' : '最大化'">
+              <svg v-if="!isExpandMaximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+            </button>
+            <button class="control-btn close-btn" @click="expandVisible = false" title="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
         </div>
       </template>
       <MultiOrgUsageDialog
@@ -184,6 +231,7 @@ import ThemeSwitcher from './components/ThemeSwitcher.vue'
 import AdminPanel from './components/AdminPanel.vue'
 import OrgDetailDialog from './components/OrgDetailDialog.vue'
 import { applyTheme, getStoredTheme } from './themes'
+import { dashboardApi } from './api'
 
 const currentTime = ref('')
 
@@ -197,6 +245,11 @@ const expandTitle = ref('')
 const expandPanelType = ref('')
 const expandSubType = ref('')
 const expandData = ref({})
+const isExpandMaximized = ref(false)
+
+const toggleExpandMaximize = () => {
+  isExpandMaximized.value = !isExpandMaximized.value
+}
 
 const passwordDialogVisible = ref(false)
 const adminPanelVisible = ref(false)
@@ -222,12 +275,50 @@ const TIME_RANGE_OPTIONS = [
   { label: '近一年', value: 'year' }
 ]
 
+const globalNetworkFilter = ref('all')
+const networkList = ref([])
+const networkLoading = ref(false)
+
+const globalPurposeFilter = ref('all')
+const purposeList = ref([])
+const purposeLoading = ref(false)
+
+const loadNetworkList = async () => {
+  networkLoading.value = true
+  try {
+    const response = await dashboardApi.getNetworkList()
+    networkList.value = response
+  } catch (error) {
+    console.error('[App] Failed to load network list:', error)
+    ElMessage.error('加载网络分类失败')
+  } finally {
+    networkLoading.value = false
+  }
+}
+
+const loadPurposeList = async () => {
+  purposeLoading.value = true
+  try {
+    const response = await dashboardApi.getPurposeDict()
+    purposeList.value = response
+  } catch (error) {
+    console.error('[App] Failed to load purpose list:', error)
+    ElMessage.error('加载设备用途失败')
+  } finally {
+    purposeLoading.value = false
+  }
+}
+
 const setTimeType = (type) => {
   timeType.value = type
 }
 
 provide('timeType', timeType)
 provide('globalTimeRange', globalTimeRange)
+provide('globalNetworkFilter', globalNetworkFilter)
+provide('networkList', networkList)
+provide('globalPurposeFilter', globalPurposeFilter)
+provide('purposeList', purposeList)
 
 let timer = null
 
@@ -316,6 +407,8 @@ onMounted(() => {
   const storedTheme = getStoredTheme()
   applyTheme(storedTheme)
   loadUsageThresholds()
+  loadNetworkList()
+  loadPurposeList()
 })
 
 onUnmounted(() => {
@@ -358,7 +451,7 @@ onUnmounted(() => {
   }
   
   .header-right {
-    width: 450px;
+    width: 600px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -371,6 +464,46 @@ onUnmounted(() => {
     color: var(--theme-text-secondary);
     white-space: nowrap;
     flex-shrink: 0;
+  }
+  
+  .network-select {
+    width: 100px;
+    flex-shrink: 0;
+    
+    :deep(.el-input__wrapper) {
+      background: var(--theme-shadow);
+      border: 1px solid var(--theme-border);
+      box-shadow: none;
+      
+      &:hover {
+        border-color: var(--theme-primary);
+      }
+    }
+    
+    :deep(.el-input__inner) {
+      color: var(--theme-text);
+      font-size: 12px;
+    }
+  }
+  
+  .purpose-select {
+    width: 100px;
+    flex-shrink: 0;
+    
+    :deep(.el-input__wrapper) {
+      background: var(--theme-shadow);
+      border: 1px solid var(--theme-border);
+      box-shadow: none;
+      
+      &:hover {
+        border-color: var(--theme-primary);
+      }
+    }
+    
+    :deep(.el-input__inner) {
+      color: var(--theme-text);
+      font-size: 12px;
+    }
   }
   
   .time-type-select {
@@ -394,7 +527,7 @@ onUnmounted(() => {
   }
   
   .time-range-select {
-    width: 120px;
+    width: 100px;
     flex-shrink: 0;
     
     :deep(.el-input__wrapper) {
@@ -538,42 +671,57 @@ onUnmounted(() => {
     white-space: nowrap;
   }
   
-  .close-btn {
+  .window-controls {
     position: absolute;
     right: 20px;
     top: 50%;
     transform: translateY(-50%);
-    width: 36px;
-    height: 36px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
-    border: 1px solid var(--theme-border-heavy);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    gap: 8px;
     
-    svg {
-      width: 18px;
-      height: 18px;
-      color: var(--theme-primary);
+    .control-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
+      border: 1px solid var(--theme-border-heavy);
+      border-radius: 8px;
+      cursor: pointer;
       transition: all 0.3s ease;
-    }
-    
-    &:hover {
-      background: linear-gradient(135deg, var(--theme-border-light) 0%, var(--theme-hover-bg) 100%);
-      border-color: var(--theme-primary);
-      box-shadow: 0 0 15px var(--theme-glow);
-      transform: translateY(-50%) scale(1.05);
       
       svg {
-        color: var(--theme-secondary);
+        width: 16px;
+        height: 16px;
+        color: var(--theme-primary);
+        transition: all 0.3s ease;
       }
-    }
-    
-    &:active {
-      transform: translateY(-50%) scale(0.95);
+      
+      &:hover {
+        background: linear-gradient(135deg, var(--theme-border-light) 0%, var(--theme-hover-bg) 100%);
+        border-color: var(--theme-primary);
+        box-shadow: 0 0 15px var(--theme-glow);
+        transform: scale(1.05);
+        
+        svg {
+          color: var(--theme-secondary);
+        }
+      }
+      
+      &:active {
+        transform: scale(0.95);
+      }
+      
+      &.close-btn {
+        &:hover {
+          border-color: var(--theme-danger);
+          
+          svg {
+            color: var(--theme-danger);
+          }
+        }
+      }
     }
   }
 }

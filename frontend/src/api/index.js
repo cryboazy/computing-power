@@ -14,61 +14,191 @@ api.interceptors.response.use(
 )
 
 export const dashboardApi = {
-  getOverviewStats: (timeRange = 'month', timeType = 'work') => 
-    api.get('/overview/stats', { params: { time_range: timeRange, time_type: timeType } }),
+  getOverviewStats: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/overview/stats', { params })
+  },
   
-  getDeviceCountTrend: (timeRange = 'month', timeType = 'work') => 
-    api.get('/trend/device-count', { params: { time_range: timeRange, time_type: timeType } }),
+  getDeviceCountTrend: (timeRange = 'month', timeType = 'work', network = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    return api.get('/trend/device-count', { params })
+  },
   
-  getMemoryTotalTrend: (timeRange = 'month', timeType = 'work') => 
-    api.get('/trend/memory-total', { params: { time_range: timeRange, time_type: timeType } }),
+  getGpuCountTrend: (timeRange = 'month', timeType = 'work', network = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    return api.get('/trend/gpu-count', { params })
+  },
   
-  getComputeTotalTrend: (timeRange = 'month', timeType = 'work') => 
-    api.get('/trend/compute-total', { params: { time_range: timeRange, time_type: timeType } }),
+  getMemoryTotalTrend: (timeRange = 'month', timeType = 'work', network = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    return api.get('/trend/memory-total', { params })
+  },
   
-  getGpuUsageTrend: (timeRange = 'month', timeType = 'work') => 
-    api.get('/trend/gpu-usage', { params: { time_range: timeRange, time_type: timeType } }),
+  getComputeTotalTrend: (timeRange = 'month', timeType = 'work', network = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    return api.get('/trend/compute-total', { params })
+  },
   
-  getUsageWarningBar: (timeRange = 'month', timeType = 'work') => 
-    api.get('/warning/usage-bar', { params: { time_range: timeRange, time_type: timeType } }),
+  getGpuUsageTrend: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/trend/gpu-usage', { params })
+  },
+  
+  getUsageWarningBar: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/warning/usage-bar', { params })
+  },
   
   getOrgGroups: () => api.get('/org/groups'),
-  getOrgTypeDistribution: (timeType = 'work') => api.get('/distribution/org-type', { params: { time_type: timeType } }),
-  getNetworkDistribution: () => api.get('/distribution/network'),
-  getNetworkDistributionByOrg: () => api.get('/distribution/network-by-org'),
-  getGpuTierDistribution: () => api.get('/distribution/gpu-tier'),
-  getGpuTierByOrgDistribution: () => api.get('/distribution/gpu-tier-by-org'),
-  getPurposeDistribution: () => api.get('/distribution/purpose'),
-  getPurposeDistributionByOrg: () => api.get('/distribution/purpose-by-org'),
+  getOrgTypeDistribution: (timeType = 'work', network = null, purpose = null) => {
+    const params = { time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/org-type', { params })
+  },
+  getNetworkDistribution: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/network', { params })
+  },
+  getNetworkDistributionByOrg: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/network-by-org', { params })
+  },
+  getNetworkList: () => api.get('/network/list'),
+  getGpuTierDistribution: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/gpu-tier', { params })
+  },
+  getGpuTierByOrgDistribution: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/gpu-tier-by-org', { params })
+  },
+  getPurposeDistribution: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/purpose', { params })
+  },
+  getPurposeDistributionByOrg: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/distribution/purpose-by-org', { params })
+  },
   getPurposeDict: () => api.get('/dict/purpose'),
+
+  getProvinceDistribution: (timeType = 'work', network = null, purpose = null) => {
+    const params = { time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/map/province', { params })
+  },
+  getLocalStats: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/local/stats', { params })
+  },
+  getLocalGpuTier: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/local/gpu-tier', { params })
+  },
+  getLocalPurpose: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/local/purpose', { params })
+  },
+  getLocalTrend: (timeType = 'work', network = null) => {
+    const params = { time_type: timeType }
+    if (network) params.network = network
+    return api.get('/local/trend', { params })
+  },
+  getCentralBubble: (timeType = 'work', network = null, purpose = null) => {
+    const params = { time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/bubble/central', { params })
+  },
+  getCentralStats: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/central/stats', { params })
+  },
+  getCentralGpuTier: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/central/gpu-tier', { params })
+  },
+  getCentralPurpose: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/central/purpose', { params })
+  },
+  getCentralTrend: (timeType = 'work', network = null) => {
+    const params = { time_type: timeType }
+    if (network) params.network = network
+    return api.get('/central/trend', { params })
+  },
   
-  getProvinceDistribution: (timeType = 'work') => api.get('/map/province', { params: { time_type: timeType } }),
-  getLocalStats: (timeRange = 'month', timeType = 'work') => 
-    api.get('/local/stats', { params: { time_range: timeRange, time_type: timeType } }),
-  getLocalGpuTier: () => api.get('/local/gpu-tier'),
-  getLocalPurpose: () => api.get('/local/purpose'),
-  getLocalTrend: (timeType = 'work') => api.get('/local/trend', { params: { time_type: timeType } }),
-  getCentralBubble: (timeType = 'work') => api.get('/bubble/central', { params: { time_type: timeType } }),
-  getCentralStats: (timeRange = 'month', timeType = 'work') => 
-    api.get('/central/stats', { params: { time_range: timeRange, time_type: timeType } }),
-  getCentralGpuTier: () => api.get('/central/gpu-tier'),
-  getCentralPurpose: () => api.get('/central/purpose'),
-  getCentralTrend: (timeType = 'work') => api.get('/central/trend', { params: { time_type: timeType } }),
+  getAllRanking: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/ranking/all', { params })
+  },
+  getGroupRanking: (groupId, timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get(`/ranking/group/${groupId}`, { params })
+  },
+  getAllGroupRankings: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/ranking/groups', { params })
+  },
+  getLocalRanking: (timeRange = 'month', timeType = 'work', purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/ranking/local', { params })
+  },
+  getCentralRanking: (timeRange = 'month', timeType = 'work', purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/ranking/central', { params })
+  },
+  getProvinceRanking: (provinceName, timeRange = 'month', timeType = 'work', purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get(`/ranking/province/${encodeURIComponent(provinceName)}`, { params })
+  },
   
-  getAllRanking: (timeRange = 'month', timeType = 'work') => 
-    api.get('/ranking/all', { params: { time_range: timeRange, time_type: timeType } }),
-  getGroupRanking: (groupId, timeRange = 'month', timeType = 'work') => 
-    api.get(`/ranking/group/${groupId}`, { params: { time_range: timeRange, time_type: timeType } }),
-  getAllGroupRankings: (timeRange = 'month', timeType = 'work') => 
-    api.get('/ranking/groups', { params: { time_range: timeRange, time_type: timeType } }),
-  getLocalRanking: (timeRange = 'month', timeType = 'work') => 
-    api.get('/ranking/local', { params: { time_range: timeRange, time_type: timeType } }),
-  getCentralRanking: (timeRange = 'month', timeType = 'work') => 
-    api.get('/ranking/central', { params: { time_range: timeRange, time_type: timeType } }),
-  getProvinceRanking: (provinceName, timeRange = 'month', timeType = 'work') => 
-    api.get(`/ranking/province/${encodeURIComponent(provinceName)}`, { params: { time_range: timeRange, time_type: timeType } }),
-  
-  getCarouselUsageTrend: (timeType = 'work', orgType = null, orgName = null, timeGrain = 'day', startDate = null, endDate = null, drillDate = null, drillOrgId = null) => {
+  getCarouselUsageTrend: (timeType = 'work', orgType = null, orgName = null, timeGrain = 'day', startDate = null, endDate = null, drillDate = null, drillOrgId = null, network = null, purpose = null) => {
     const params = { time_type: timeType }
     if (orgType) params.org_type = orgType
     if (orgName) params.org_name = orgName
@@ -77,6 +207,8 @@ export const dashboardApi = {
     if (endDate) params.end_date = endDate
     if (drillDate) params.drill_date = drillDate
     if (drillOrgId) params.drill_org_id = drillOrgId
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
     return api.get('/carousel/usage-trend', { params })
   },
   
@@ -84,11 +216,12 @@ export const dashboardApi = {
     const params = { time_range: timeRange, time_type: timeType }
     return api.get(`/org/detail/${orgId}`, { params })
   },
-  getOrgUsageTrend: (orgId, timeType = 'all', startDate = null, endDate = null, purpose = null) => {
+  getOrgUsageTrend: (orgId, timeType = 'all', startDate = null, endDate = null, purpose = null, network = null) => {
     const params = { time_type: timeType }
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
     if (purpose) params.purpose = purpose
+    if (network) params.network = network
     return api.get(`/org/usage-trend/${orgId}`, { params })
   },
   getOrgDistribution: (orgId) => api.get(`/org/distribution/${orgId}`),

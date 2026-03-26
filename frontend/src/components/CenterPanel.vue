@@ -4,43 +4,37 @@
       <div class="stat-card">
         <div class="stat-label">设备总数</div>
         <div class="stat-value">
-          {{ overviewStats.total_devices }}
-          <span class="stat-unit">台</span>
+          {{ overviewStats.total_devices }}<span class="stat-unit-suffix">台</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">显存总量</div>
         <div class="stat-value">
-          {{ formatNumber(overviewStats.total_memory_gb) }}
-          <span class="stat-unit">GB</span>
+          {{ formatNumber(overviewStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">总算力</div>
         <div class="stat-value">
-          {{ formatNumber(overviewStats.total_compute_tflops / 1000, 2) }}
-          <span class="stat-unit">PFLOPS</span>
+          {{ formatNumber(overviewStats.total_compute_tflops / 1000, 2) }}<span class="stat-unit-suffix">PF</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">平均使用率</div>
         <div class="stat-value" :style="{ color: overviewUsageColor }">
-          {{ overviewStats.avg_gpu_usage }}
-          <span class="stat-unit">%</span>
+          {{ formatNumber(overviewStats.avg_gpu_usage, 2) }}<span class="stat-unit-suffix">%</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">显存使用率</div>
         <div class="stat-value" :title="`显存已用量: ${formatNumber(overviewStats.memory_used_gb)} GB`">
-          {{ overviewStats.memory_usage_rate }}
-          <span class="stat-unit">%</span>
+          {{ formatNumber(overviewStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">显存利用率</div>
         <div class="stat-value">
-          {{ overviewStats.avg_memory_utilization }}
-          <span class="stat-unit">%</span>
+          {{ formatNumber(overviewStats.avg_memory_utilization, 2) }}<span class="stat-unit-suffix">%</span>
         </div>
       </div>
     </div>
@@ -90,14 +84,26 @@
                 </div>
               </div>
             </div>
-            <div v-show="orgTypeChartType === 'pie'" class="dual-pie-container">
-              <div v-for="(data, groupName) in orgTypeData" :key="groupName" class="pie-wrapper">
-                <div class="pie-label">{{ groupName }}</div>
-                <v-chart :option="getPieOption(data, groupName)" autoresize />
+            <template v-if="orgTypeChartType === 'pie' && hasOrgTypeData">
+              <div class="dual-pie-container">
+                <div v-for="(data, groupName) in orgTypeData" :key="groupName" class="pie-wrapper">
+                  <div v-if="data && data.length" class="pie-wrapper-inner">
+                    <div class="pie-label">{{ groupName }}</div>
+                    <v-chart :option="getPieOption(data, groupName)" autoresize @click="handleOrgTypeChartClick" />
+                  </div>
+                </div>
               </div>
+            </template>
+            <div v-if="orgTypeChartType === 'pie' && !hasOrgTypeData" class="no-data">
+              暂无数据
             </div>
-            <div v-show="orgTypeChartType === 'bar'" class="org-type-bar-container">
-              <v-chart :option="orgTypeBarOption" autoresize />
+            <template v-if="orgTypeChartType === 'bar' && hasOrgTypeData">
+              <div class="org-type-bar-container">
+                <v-chart :option="orgTypeBarOption" autoresize @click="handleOrgTypeChartClick" />
+              </div>
+            </template>
+            <div v-if="orgTypeChartType === 'bar' && !hasOrgTypeData" class="no-data">
+              暂无数据
             </div>
           </div>
           <div class="chart-item carousel-chart">
@@ -124,8 +130,13 @@
                 </div>
               </div>
             </div>
-            <v-chart v-show="networkChartType === 'bar'" :option="networkOption" autoresize />
-            <v-chart v-show="networkChartType === 'pie'" :option="networkPieOption" autoresize />
+            <template v-if="networkByOrgData.data.length">
+              <v-chart v-if="networkChartType === 'bar'" :option="networkOption" autoresize />
+              <v-chart v-if="networkChartType === 'pie'" :option="networkPieOption" autoresize />
+            </template>
+            <div v-if="!networkByOrgData.data.length" class="no-data">
+              暂无数据
+            </div>
           </div>
           <div class="chart-item carousel-chart">
             <div class="chart-title">
@@ -151,7 +162,12 @@
                 </div>
               </div>
             </div>
-            <v-chart :option="gpuTierOption" autoresize />
+            <template v-if="gpuTierByOrgData.length">
+              <v-chart :option="gpuTierOption" autoresize />
+            </template>
+            <div v-if="!gpuTierByOrgData.length" class="no-data">
+              暂无数据
+            </div>
           </div>
           <div class="chart-item carousel-chart">
             <div class="chart-title">
@@ -177,8 +193,13 @@
                 </div>
               </div>
             </div>
-            <v-chart v-show="purposeChartType === 'bar'" :option="purposeOption" autoresize />
-            <v-chart v-show="purposeChartType === 'pie'" :option="purposePieOption" autoresize />
+            <template v-if="purposeByOrgData.data.length">
+              <v-chart v-if="purposeChartType === 'bar'" :option="purposeOption" autoresize />
+              <v-chart v-if="purposeChartType === 'pie'" :option="purposePieOption" autoresize />
+            </template>
+            <div v-if="!purposeByOrgData.data.length" class="no-data">
+              暂无数据
+            </div>
           </div>
         </div>
         
@@ -194,7 +215,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">设备总数</div>
-                <div class="stat-value">{{ localStats.total_devices }}<span class="stat-unit">台</span></div>
+                <div class="stat-value">{{ localStats.total_devices }}<span class="stat-unit-suffix">台</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -207,7 +228,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存总量</div>
-                <div class="stat-value">{{ formatNumber(localStats.total_memory_gb) }}<span class="stat-unit">GB</span></div>
+                <div class="stat-value">{{ formatNumber(localStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -218,7 +239,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">总算力</div>
-                <div class="stat-value">{{ formatNumber(localStats.total_compute_tflops / 1000, 2) }}<span class="stat-unit">PFLOPS</span></div>
+                <div class="stat-value">{{ formatNumber(localStats.total_compute_tflops / 1000, 2) }}<span class="stat-unit-suffix">PF</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -229,7 +250,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">平均使用率</div>
-                <div class="stat-value" :style="{ color: localUsageColor }">{{ localStats.avg_gpu_usage }}<span class="stat-unit">%</span></div>
+                <div class="stat-value" :style="{ color: localUsageColor }">{{ formatNumber(localStats.avg_gpu_usage, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -241,7 +262,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存使用率</div>
-                <div class="stat-value" :title="`显存已用量: ${formatNumber(localStats.memory_used_gb)} GB`">{{ localStats.memory_usage_rate }}<span class="stat-unit">%</span></div>
+                <div class="stat-value" :title="`显存已用量: ${formatNumber(localStats.memory_used_gb)} GB`">{{ formatNumber(localStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -254,7 +275,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存利用率</div>
-                <div class="stat-value">{{ localStats.avg_memory_utilization }}<span class="stat-unit">%</span></div>
+                <div class="stat-value">{{ formatNumber(localStats.avg_memory_utilization, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
           </div>
@@ -264,19 +285,34 @@
               <div class="chart-title">
                 省份分布
               </div>
-              <v-chart :option="mapOption" autoresize @click="handleMapClick" />
+              <template v-if="provinceData.length">
+                <v-chart :option="mapOption" autoresize @click="handleMapClick" />
+              </template>
+              <div v-if="!provinceData.length" class="no-data">
+                暂无数据
+              </div>
             </div>
             <div class="local-chart-item">
               <div class="chart-title">
                 运行网络分布
               </div>
-              <v-chart :option="localGpuTierOption" autoresize />
+              <template v-if="localGpuTierData.length && localGpuTierOption">
+                <v-chart :option="localGpuTierOption" autoresize />
+              </template>
+              <div v-if="!localGpuTierData.length || !localGpuTierOption" class="no-data">
+                暂无数据
+              </div>
             </div>
             <div class="local-chart-item">
               <div class="chart-title">
                 用途分布
               </div>
-              <v-chart :option="localPurposeOption" autoresize />
+              <template v-if="localPurposeData.length && localPurposeOption">
+                <v-chart :option="localPurposeOption" autoresize />
+              </template>
+              <div v-if="!localPurposeData.length || !localPurposeOption" class="no-data">
+                暂无数据
+              </div>
             </div>
           </div>
         </div>
@@ -293,7 +329,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">设备总数</div>
-                <div class="stat-value">{{ centralStats.total_devices }}<span class="stat-unit">台</span></div>
+                <div class="stat-value">{{ centralStats.total_devices }}<span class="stat-unit-suffix">台</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -306,7 +342,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存总量</div>
-                <div class="stat-value">{{ formatNumber(centralStats.total_memory_gb) }}<span class="stat-unit">GB</span></div>
+                <div class="stat-value">{{ formatNumber(centralStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -317,7 +353,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">总算力</div>
-                <div class="stat-value">{{ formatNumber(centralStats.total_compute_tflops / 1000, 2) }}<span class="stat-unit">PFLOPS</span></div>
+                <div class="stat-value">{{ formatNumber(centralStats.total_compute_tflops / 1000, 2) }}<span class="stat-unit-suffix">PF</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -328,7 +364,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">平均使用率</div>
-                <div class="stat-value" :style="{ color: centralUsageColor }">{{ centralStats.avg_gpu_usage }}<span class="stat-unit">%</span></div>
+                <div class="stat-value" :style="{ color: centralUsageColor }">{{ formatNumber(centralStats.avg_gpu_usage, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -340,7 +376,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存使用率</div>
-                <div class="stat-value" :title="`显存已用量: ${formatNumber(centralStats.memory_used_gb)} GB`">{{ centralStats.memory_usage_rate }}<span class="stat-unit">%</span></div>
+                <div class="stat-value" :title="`显存已用量: ${formatNumber(centralStats.memory_used_gb)} GB`">{{ formatNumber(centralStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -353,7 +389,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存利用率</div>
-                <div class="stat-value">{{ centralStats.avg_memory_utilization }}<span class="stat-unit">%</span></div>
+                <div class="stat-value">{{ formatNumber(centralStats.avg_memory_utilization, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
           </div>
@@ -375,19 +411,29 @@
                   </div>
                 </div>
               </div>
-              <v-chart v-show="centralDeviceViewType === 'chart'" :option="centralBarOption" autoresize />
-              <div v-show="centralDeviceViewType === 'list'" class="central-device-list">
-                <div 
-                  v-for="item in centralData" 
-                  :key="item.org_id" 
-                  class="list-item"
-                  @click="handleCentralOrgClick(item)"
-                >
-                  <span class="org-name">{{ item.name }}</span>
-                  <span class="org-value">{{ item.value }}台</span>
-                  <span class="org-value">{{ item.gpu_count }}张</span>
-                  <span class="org-value">{{ formatNumber(item.memory_gb) }}GB</span>
-                  <span class="org-value">{{ formatNumber(item.compute_tflops) }}TF</span>
+              <template v-if="centralData.length && centralDeviceViewType === 'chart'">
+                <v-chart :option="centralBarOption" autoresize @click="handleCentralChartClick" />
+              </template>
+              <div v-if="!centralData.length && centralDeviceViewType === 'chart'" class="no-data">
+                暂无数据
+              </div>
+              <div v-if="centralDeviceViewType === 'list'" class="central-device-list">
+                <template v-if="centralData.length">
+                  <div 
+                    v-for="item in centralData" 
+                    :key="item.org_id" 
+                    class="list-item"
+                    @click="handleCentralOrgClick(item)"
+                  >
+                    <span class="org-name">{{ item.name }}</span>
+                    <span class="org-value">{{ item.value }}台</span>
+                    <span class="org-value">{{ item.gpu_count }}块</span>
+                    <span class="org-value">{{ formatNumber(item.memory_gb) }}GB</span>
+                    <span class="org-value">{{ formatNumber(item.compute_tflops) }}TF</span>
+                  </div>
+                </template>
+                <div v-if="!centralData.length" class="no-data-list">
+                  暂无数据
                 </div>
               </div>
             </div>
@@ -395,19 +441,34 @@
               <div class="chart-title">
                 运行网络分布
               </div>
-              <v-chart :option="centralNetworkOption" autoresize />
+              <template v-if="networkData.length && centralNetworkOption">
+                <v-chart :option="centralNetworkOption" autoresize />
+              </template>
+              <div v-if="!networkData.length || !centralNetworkOption" class="no-data">
+                暂无数据
+              </div>
             </div>
             <div class="central-chart-item">
               <div class="chart-title">
                 GPU档次分布
               </div>
-              <v-chart :option="centralGpuTierOption" autoresize />
+              <template v-if="centralGpuTierData.length && centralGpuTierOption">
+                <v-chart :option="centralGpuTierOption" autoresize />
+              </template>
+              <div v-if="!centralGpuTierData.length || !centralGpuTierOption" class="no-data">
+                暂无数据
+              </div>
             </div>
             <div class="central-chart-item">
               <div class="chart-title">
                 用途分布
               </div>
-              <v-chart :option="centralPurposeOption" autoresize />
+              <template v-if="centralPurposeData.length && centralPurposeOption">
+                <v-chart :option="centralPurposeOption" autoresize />
+              </template>
+              <div v-if="!centralPurposeData.length || !centralPurposeOption" class="no-data">
+                暂无数据
+              </div>
             </div>
           </div>
         </div>
@@ -419,7 +480,11 @@
         <span class="panel-title">单位使用率趋势</span>
       </div>
       <div class="panel-content">
+        <div v-if="!carouselData.length" class="no-data">
+          暂无数据
+        </div>
         <el-carousel 
+          v-else
           :interval="5000" 
           indicator-position="outside"
           height="100%"
@@ -524,6 +589,8 @@ const showOrgDetail = inject('showOrgDetail')
 const globalPageSize = inject('globalPageSize')
 const setGlobalPageSizeFromInject = inject('setGlobalPageSize')
 const globalTimeRange = inject('globalTimeRange')
+const globalNetworkFilter = inject('globalNetworkFilter')
+const globalPurposeFilter = inject('globalPurposeFilter')
 const { getAllColors } = useTheme()
 
 const getUsageColor = (value) => {
@@ -672,9 +739,65 @@ const createPieOption = (data, colors) => {
       backgroundColor: themeColors.panelBgStart,
       borderColor: themeColors.border,
       textStyle: { color: themeColors.text },
+      confine: true,
+      position: (point, params, dom, rect, size) => {
+        const [x, y] = point
+        const { contentSize, viewSize } = size
+        const [boxWidth, boxHeight] = contentSize
+        const [viewWidth, viewHeight] = viewSize
+        
+        let posX = x + 15
+        let posY = y + 15
+        
+        if (posX + boxWidth > viewWidth - 10) {
+          posX = x - boxWidth - 15
+        }
+        if (posY + boxHeight > viewHeight - 10) {
+          posY = viewHeight - boxHeight - 10
+        }
+        if (posX < 10) posX = 10
+        if (posY < 10) posY = 10
+        
+        return [posX, posY]
+      },
       formatter: (params) => {
         const originalData = data[params.dataIndex]
-        return `${originalData.name}<br/>${originalData.value}台 (${params.percent}%)`
+        const gpu_count = originalData.gpu_count || 0
+        const memory_gb = originalData.memory_gb || 0
+        const compute_tflops = originalData.compute_tflops || 0
+        const avg_gpu_usage = originalData.avg_gpu_usage || 0
+        const usageColor = getUsageColor(avg_gpu_usage)
+        const computeDisplay = compute_tflops >= 1000 
+          ? `${(compute_tflops / 1000).toFixed(2)} PF` 
+          : `${compute_tflops.toFixed(2)} TF`
+        const memoryDisplay = memory_gb >= 1024 
+          ? `${(memory_gb / 1024).toFixed(2)} TB` 
+          : `${memory_gb.toFixed(2)} GB`
+        
+        return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${originalData.name}</div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${themeColors.textSecondary};">设备数量:</span>
+            <span style="color: ${themeColors.chart1}; font-weight: bold;">${originalData.value} 台</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${themeColors.textSecondary};">GPU数量:</span>
+            <span style="color: ${themeColors.chart2}; font-weight: bold;">${gpu_count} 块</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${themeColors.textSecondary};">显存总量:</span>
+            <span style="color: ${themeColors.chart4}; font-weight: bold;">${memoryDisplay}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${themeColors.textSecondary};">总算力:</span>
+            <span style="color: ${themeColors.chart3}; font-weight: bold;">${computeDisplay}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: ${themeColors.textSecondary};">平均使用率:</span>
+            <span style="color: ${usageColor}; font-weight: bold;">${avg_gpu_usage}%</span>
+          </div>
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${themeColors.border}; color: ${themeColors.info}; font-size: 11px;">
+            点击查看组织详情
+          </div>`
       }
     },
     series: [{
@@ -701,6 +824,11 @@ const createPieOption = (data, colors) => {
       data: data.map((d, i) => ({
         name: d.name,
         value: d.value,
+        org_id: d.org_id,
+        gpu_count: d.gpu_count,
+        memory_gb: d.memory_gb,
+        compute_tflops: d.compute_tflops,
+        avg_gpu_usage: d.avg_gpu_usage,
         itemStyle: { color: colors[i % colors.length] }
       }))
     }]
@@ -708,10 +836,19 @@ const createPieOption = (data, colors) => {
 }
 
 const getPieOption = (data, groupName) => {
+  if (!data || !data.length) {
+    return null
+  }
   const colors = getAllColors()
   const colorPalette = [colors.chart1, colors.chart2, colors.chart4, colors.chart3, colors.chart5, colors.chart6, '#9b59b6', '#3498db', '#1abc9c', '#e74c3c']
   return createPieOption(data, colorPalette)
 }
+
+const hasOrgTypeData = computed(() => {
+  const keys = Object.keys(orgTypeData.value)
+  if (keys.length === 0) return false
+  return keys.some(key => orgTypeData.value[key] && orgTypeData.value[key].length > 0)
+})
 
 const orgTypePageCount = computed(() => {
   const allData = Object.values(orgTypeData.value).flat()
@@ -740,10 +877,67 @@ const orgTypeBarOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
+      confine: true,
+      position: (point, params, dom, rect, size) => {
+        const [x, y] = point
+        const { contentSize, viewSize } = size
+        const [boxWidth, boxHeight] = contentSize
+        const [viewWidth, viewHeight] = viewSize
+        
+        let posX = x + 15
+        let posY = y + 15
+        
+        if (posX + boxWidth > viewWidth - 10) {
+          posX = x - boxWidth - 15
+        }
+        if (posY + boxHeight > viewHeight - 10) {
+          posY = viewHeight - boxHeight - 10
+        }
+        if (posX < 10) posX = 10
+        if (posY < 10) posY = 10
+        
+        return [posX, posY]
+      },
       formatter: (params) => {
         const data = params[0]
-        const originalName = pageData[data.dataIndex]?.name || data.name
-        return `${originalName}<br/>设备数量: ${data.value}台`
+        const originalData = pageData[data.dataIndex]
+        const originalName = originalData?.name || data.name
+        const gpu_count = originalData?.gpu_count || 0
+        const memory_gb = originalData?.memory_gb || 0
+        const compute_tflops = originalData?.compute_tflops || 0
+        const avg_gpu_usage = originalData?.avg_gpu_usage || 0
+        const usageColor = getUsageColor(avg_gpu_usage)
+        const computeDisplay = compute_tflops >= 1000 
+          ? `${(compute_tflops / 1000).toFixed(2)} PF` 
+          : `${compute_tflops.toFixed(2)} TF`
+        const memoryDisplay = memory_gb >= 1024 
+          ? `${(memory_gb / 1024).toFixed(2)} TB` 
+          : `${memory_gb.toFixed(2)} GB`
+        
+        return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${originalName}</div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${colors.textSecondary};">设备数量:</span>
+            <span style="color: ${colors.chart1}; font-weight: bold;">${data.value} 台</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${colors.textSecondary};">GPU数量:</span>
+            <span style="color: ${colors.chart2}; font-weight: bold;">${gpu_count} 块</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${colors.textSecondary};">显存总量:</span>
+            <span style="color: ${colors.chart4}; font-weight: bold;">${memoryDisplay}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <span style="color: ${colors.textSecondary};">总算力:</span>
+            <span style="color: ${colors.chart3}; font-weight: bold;">${computeDisplay}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: ${colors.textSecondary};">平均使用率:</span>
+            <span style="color: ${usageColor}; font-weight: bold;">${avg_gpu_usage}%</span>
+          </div>
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${colors.border}; color: ${colors.info}; font-size: 11px;">
+            点击查看组织详情
+          </div>`
       }
     },
     grid: {
@@ -776,7 +970,15 @@ const orgTypeBarOption = computed(() => {
         borderRadius: [4, 4, 0, 0],
         color: (params) => chartColors[params.dataIndex % chartColors.length]
       },
-      data: pageData.map(d => d.value)
+      data: pageData.map(d => ({
+        value: d.value,
+        name: d.name,
+        org_id: d.org_id,
+        gpu_count: d.gpu_count,
+        memory_gb: d.memory_gb,
+        compute_tflops: d.compute_tflops,
+        avg_gpu_usage: d.avg_gpu_usage
+      }))
     }]
   }
 })
@@ -821,7 +1023,7 @@ const networkOption = computed(() => {
         let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
         params.forEach(p => {
           if (p.value !== null && p.value !== undefined && p.value !== 0) {
-            result += `${p.marker} ${p.seriesName}: <strong>${p.value}台</strong><br/>`
+            result += `${p.marker} ${p.seriesName}: <strong>${p.value}块</strong><br/>`
           }
         })
         return result
@@ -877,7 +1079,7 @@ const networkPieOption = computed(() => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        return `${params.name}<br/>${params.value}台 (${params.percent}%)`
+        return `${params.name}<br/>${params.value}块 (${params.percent}%)`
       }
     },
     legend: {
@@ -949,7 +1151,7 @@ const gpuTierOption = computed(() => {
         backgroundColor: colors.panelBgStart,
         borderColor: colors.border,
         textStyle: { color: colors.text },
-        formatter: '{b}: {c}台 ({d}%)'
+        formatter: '{b}: {c}块 ({d}%)'
       },
       legend: {
         data: tierNames,
@@ -970,7 +1172,7 @@ const gpuTierOption = computed(() => {
           show: true,
           fontSize: 10,
           color: colors.textSecondary,
-          formatter: '{b}\n{c}台'
+          formatter: '{b}\n{c}块'
         },
         emphasis: {
           label: {
@@ -1037,7 +1239,7 @@ const gpuTierOption = computed(() => {
         let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
         params.forEach(p => {
           if (p.value !== null && p.value !== undefined) {
-            result += `${p.marker} ${p.seriesName}: <strong>${p.value}台</strong><br/>`
+            result += `${p.marker} ${p.seriesName}: <strong>${p.value}块</strong><br/>`
           }
         })
         return result
@@ -1116,7 +1318,7 @@ const purposeOption = computed(() => {
         let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
         params.forEach(p => {
           if (p.value !== null && p.value !== undefined && p.value !== 0) {
-            result += `${p.marker} ${p.seriesName}: <strong>${p.value}台</strong><br/>`
+            result += `${p.marker} ${p.seriesName}: <strong>${p.value}块</strong><br/>`
           }
         })
         return result
@@ -1170,7 +1372,7 @@ const purposePieOption = computed(() => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        return `${params.name}<br/>${params.value}台 (${params.percent}%)`
+        return `${params.name}<br/>${params.value}块 (${params.percent}%)`
       }
     },
     legend: {
@@ -1283,8 +1485,8 @@ const mapOption = computed(() => {
           const d = params.data
           const usageColor = getUsageColor(d.avg_gpu_usage)
           const computeDisplay = d.compute_tflops >= 1000 
-            ? `${(d.compute_tflops / 1000).toFixed(2)} PFLOPS` 
-            : `${d.compute_tflops.toFixed(2)} TFLOPS`
+            ? `${(d.compute_tflops / 1000).toFixed(2)} PF` 
+            : `${d.compute_tflops.toFixed(2)} TF`
           const memoryDisplay = d.memory_gb >= 1024 
             ? `${(d.memory_gb / 1024).toFixed(2)} TB` 
             : `${d.memory_gb.toFixed(2)} GB`
@@ -1364,6 +1566,13 @@ const mapOption = computed(() => {
 })
 
 const localGpuTierOption = computed(() => {
+  if (!localGpuTierData.value || !localGpuTierData.value.length) {
+    return null
+  }
+  const hasValidData = localGpuTierData.value.some(d => d.value > 0)
+  if (!hasValidData) {
+    return null
+  }
   const colors = getAllColors()
   const tierColors = [colors.chart3, colors.chart4, colors.chart5, colors.chart6]
   
@@ -1373,7 +1582,7 @@ const localGpuTierOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}块 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1389,7 +1598,7 @@ const localGpuTierOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}台'
+        formatter: '{b}\n{c}块'
       },
       emphasis: {
         label: {
@@ -1404,7 +1613,7 @@ const localGpuTierOption = computed(() => {
         length: 8,
         length2: 8
       },
-      data: networkData.value.map((d, i) => ({
+      data: localGpuTierData.value.map((d, i) => ({
         name: d.name,
         value: d.value,
         itemStyle: { color: tierColors[i % tierColors.length] }
@@ -1414,6 +1623,13 @@ const localGpuTierOption = computed(() => {
 })
 
 const localPurposeOption = computed(() => {
+  if (!localPurposeData.value || !localPurposeData.value.length) {
+    return null
+  }
+  const hasValidData = localPurposeData.value.some(d => d.value > 0)
+  if (!hasValidData) {
+    return null
+  }
   const colors = getAllColors()
   const purposeColors = [colors.chart1, colors.chart2, colors.chart4]
   
@@ -1423,7 +1639,7 @@ const localPurposeOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}块 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1439,7 +1655,7 @@ const localPurposeOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}台'
+        formatter: '{b}\n{c}块'
       },
       emphasis: {
         label: {
@@ -1499,12 +1715,17 @@ const centralBarOption = computed(() => {
         const item = reversedData[data.dataIndex]
         if (!item) return data.name
         
-        const computeDisplay = item.compute_tflops >= 1000 
-          ? `${(item.compute_tflops / 1000).toFixed(2)} PFLOPS` 
-          : `${item.compute_tflops?.toFixed(2) || 0} TFLOPS`
-        const memoryDisplay = item.memory_gb >= 1024 
-          ? `${(item.memory_gb / 1024).toFixed(2)} TB` 
-          : `${item.memory_gb?.toFixed(2) || 0} GB`
+        const gpu_count = item.gpu_count || 0
+        const memory_gb = item.memory_gb || 0
+        const compute_tflops = item.compute_tflops || 0
+        const avg_gpu_usage = item.avg_gpu_usage || 0
+        const usageColor = getUsageColor(avg_gpu_usage)
+        const computeDisplay = compute_tflops >= 1000 
+          ? `${(compute_tflops / 1000).toFixed(2)} PF` 
+          : `${compute_tflops.toFixed(2)} TF`
+        const memoryDisplay = memory_gb >= 1024 
+          ? `${(memory_gb / 1024).toFixed(2)} TB` 
+          : `${memory_gb.toFixed(2)} GB`
         
         return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${item.name}</div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -1513,15 +1734,19 @@ const centralBarOption = computed(() => {
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
             <span style="color: ${colors.textSecondary};">GPU数量:</span>
-            <span style="color: ${colors.chart2}; font-weight: bold;">${item.gpu_count || 0} 块</span>
+            <span style="color: ${colors.chart2}; font-weight: bold;">${gpu_count} 块</span>
           </div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
             <span style="color: ${colors.textSecondary};">显存总量:</span>
             <span style="color: ${colors.chart4}; font-weight: bold;">${memoryDisplay}</span>
           </div>
-          <div style="display: flex; justify-content: space-between;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
             <span style="color: ${colors.textSecondary};">总算力:</span>
             <span style="color: ${colors.chart3}; font-weight: bold;">${computeDisplay}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: ${colors.textSecondary};">平均使用率:</span>
+            <span style="color: ${usageColor}; font-weight: bold;">${avg_gpu_usage}%</span>
           </div>
           <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid ${colors.border}; color: ${colors.info}; font-size: 11px;">
             点击查看组织详情
@@ -1551,7 +1776,14 @@ const centralBarOption = computed(() => {
     },
     series: [{
       type: 'bar',
-      data: centralData.value.map(d => d.value).reverse(),
+      data: centralData.value.map((d, i) => ({
+        value: d.value,
+        name: d.name,
+        org_id: d.org_id,
+        gpu_count: d.gpu_count,
+        memory_gb: d.memory_gb,
+        compute_tflops: d.compute_tflops
+      })).reverse(),
       itemStyle: {
         color: {
           type: 'linear',
@@ -1574,6 +1806,13 @@ const centralBarOption = computed(() => {
 })
 
 const centralNetworkOption = computed(() => {
+  if (!networkData.value || !networkData.value.length) {
+    return null
+  }
+  const hasValidData = networkData.value.some(d => d.value > 0)
+  if (!hasValidData) {
+    return null
+  }
   const colors = getAllColors()
   const networkColors = [colors.chart1, colors.chart2, colors.chart3, colors.chart4, colors.chart5, colors.chart6]
   
@@ -1583,7 +1822,7 @@ const centralNetworkOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}块 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1599,7 +1838,7 @@ const centralNetworkOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}台'
+        formatter: '{b}\n{c}块'
       },
       emphasis: {
         label: {
@@ -1624,6 +1863,13 @@ const centralNetworkOption = computed(() => {
 })
 
 const centralGpuTierOption = computed(() => {
+  if (!centralGpuTierData.value || !centralGpuTierData.value.length) {
+    return null
+  }
+  const hasValidData = centralGpuTierData.value.some(d => d.value > 0)
+  if (!hasValidData) {
+    return null
+  }
   const colors = getAllColors()
   const tierColors = [colors.chart3, colors.chart4, colors.chart5, colors.chart6]
   
@@ -1633,7 +1879,7 @@ const centralGpuTierOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}块 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1649,7 +1895,7 @@ const centralGpuTierOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}台'
+        formatter: '{b}\n{c}块'
       },
       emphasis: {
         label: {
@@ -1674,6 +1920,13 @@ const centralGpuTierOption = computed(() => {
 })
 
 const centralPurposeOption = computed(() => {
+  if (!centralPurposeData.value || !centralPurposeData.value.length) {
+    return null
+  }
+  const hasValidData = centralPurposeData.value.some(d => d.value > 0)
+  if (!hasValidData) {
+    return null
+  }
   const colors = getAllColors()
   const purposeColors = [colors.chart1, colors.chart2, colors.chart4]
   
@@ -1683,7 +1936,7 @@ const centralPurposeOption = computed(() => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}块 ({d}%)'
     },
     series: [{
       type: 'pie',
@@ -1699,7 +1952,7 @@ const centralPurposeOption = computed(() => {
         show: true,
         fontSize: 11,
         color: colors.textSecondary,
-        formatter: '{b}\n{c}台'
+        formatter: '{b}\n{c}块'
       },
       emphasis: {
         label: {
@@ -1983,10 +2236,12 @@ const loadCentralStats = async () => {
 
 const fetchData = async () => {
   try {
+    const network = globalNetworkFilter?.value === 'all' ? null : globalNetworkFilter?.value
+    const purposeFilter = globalPurposeFilter?.value === 'all' ? null : globalPurposeFilter?.value
     const [
       stats,
       orgType,
-      network,
+      networkDistribution,
       networkByOrg,
       gpuTierByOrg,
       purpose,
@@ -2002,28 +2257,28 @@ const fetchData = async () => {
       centralTrend,
       carousel
     ] = await Promise.all([
-      dashboardApi.getOverviewStats(globalTimeRange.value, timeType.value),
-      dashboardApi.getOrgTypeDistribution(timeType.value),
-      dashboardApi.getNetworkDistribution(),
-      dashboardApi.getNetworkDistributionByOrg(),
-      dashboardApi.getGpuTierByOrgDistribution(),
-      dashboardApi.getPurposeDistribution(),
-      dashboardApi.getPurposeDistributionByOrg(),
-      dashboardApi.getProvinceDistribution(timeType.value),
-      dashboardApi.getLocalStats(globalTimeRange.value, timeType.value),
-      dashboardApi.getLocalGpuTier(),
-      dashboardApi.getLocalPurpose(),
-      dashboardApi.getCentralBubble(timeType.value),
-      dashboardApi.getCentralStats(globalTimeRange.value, timeType.value),
-      dashboardApi.getCentralGpuTier(),
-      dashboardApi.getCentralPurpose(),
-      dashboardApi.getCentralTrend(timeType.value),
-      dashboardApi.getCarouselUsageTrend(timeType.value, null, null, getTimeGrainFromRange(globalTimeRange.value), getStartDateFromRange(globalTimeRange.value))
+      dashboardApi.getOverviewStats(globalTimeRange.value, timeType.value, network, purposeFilter),
+      dashboardApi.getOrgTypeDistribution(timeType.value, network, purposeFilter),
+      dashboardApi.getNetworkDistribution(network, purposeFilter),
+      dashboardApi.getNetworkDistributionByOrg(network, purposeFilter),
+      dashboardApi.getGpuTierByOrgDistribution(network, purposeFilter),
+      dashboardApi.getPurposeDistribution(network, purposeFilter),
+      dashboardApi.getPurposeDistributionByOrg(network, purposeFilter),
+      dashboardApi.getProvinceDistribution(timeType.value, network, purposeFilter),
+      dashboardApi.getLocalStats(globalTimeRange.value, timeType.value, network, purposeFilter),
+      dashboardApi.getLocalGpuTier(network, purposeFilter),
+      dashboardApi.getLocalPurpose(network, purposeFilter),
+      dashboardApi.getCentralBubble(timeType.value, network, purposeFilter),
+      dashboardApi.getCentralStats(globalTimeRange.value, timeType.value, network, purposeFilter),
+      dashboardApi.getCentralGpuTier(network, purposeFilter),
+      dashboardApi.getCentralPurpose(network, purposeFilter),
+      dashboardApi.getCentralTrend(timeType.value, network),
+      dashboardApi.getCarouselUsageTrend(timeType.value, null, null, getTimeGrainFromRange(globalTimeRange.value), getStartDateFromRange(globalTimeRange.value), null, null, null, network, purposeFilter)
     ])
     
     overviewStats.value = stats
     orgTypeData.value = orgType
-    networkData.value = network
+    networkData.value = networkDistribution
     networkByOrgData.value = networkByOrg
     gpuTierByOrgData.value = gpuTierByOrg
     purposeData.value = purpose
@@ -2059,7 +2314,7 @@ const handleCarouselChartClick = async (params, item) => {
       drillDialogVisible.value = true
       
       try {
-        const result = await dashboardApi.getCarouselUsageTrend(timeType.value, null, null, 'day', null, null, clickedDate, item.org_id)
+        const result = await dashboardApi.getCarouselUsageTrend(timeType.value, null, null, 'day', null, null, clickedDate, item.org_id, globalNetworkFilter?.value === 'all' ? null : globalNetworkFilter?.value)
         drillTrendData.value = result.trend || []
       } catch (error) {
         console.error('Failed to drill down:', error)
@@ -2093,6 +2348,21 @@ const handleMapClick = (params) => {
 const handleCentralOrgClick = (item) => {
   if (item.org_id && showOrgDetail) {
     showOrgDetail(item.org_id, 'devices')
+  }
+}
+
+const handleCentralChartClick = (params) => {
+  if (params.data && params.data.org_id && showOrgDetail) {
+    showOrgDetail(params.data.org_id, 'devices')
+  }
+}
+
+const handleOrgTypeChartClick = (params) => {
+  if (params.data) {
+    const orgId = params.data.org_id
+    if (orgId && showOrgDetail) {
+      showOrgDetail(orgId, 'devices')
+    }
   }
 }
 
@@ -2156,6 +2426,14 @@ watch(timeType, () => {
   fetchData()
 })
 
+watch(() => globalNetworkFilter?.value, () => {
+  fetchData()
+})
+
+watch(() => globalPurposeFilter?.value, () => {
+  fetchData()
+})
+
 onUnmounted(() => {
   stopCarousel()
   if (cleanup) cleanup()
@@ -2179,6 +2457,13 @@ onUnmounted(() => {
     flex: 1;
     padding: 12px 16px;
   }
+}
+
+.stat-unit-suffix {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--theme-text-secondary);
+  margin-left: 2px;
 }
 
 .charts-section {
@@ -2396,6 +2681,16 @@ onUnmounted(() => {
         min-height: 0;
       }
       
+      .no-data {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--theme-text-muted);
+        font-size: 14px;
+        min-height: 100px;
+      }
+      
       &.org-type-panel {
         display: flex;
         flex-direction: column;
@@ -2415,6 +2710,12 @@ onUnmounted(() => {
             display: flex;
             flex-direction: column;
             
+            .pie-wrapper-inner {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+            }
+            
             .pie-label {
               font-size: 11px;
               color: var(--theme-primary);
@@ -2428,6 +2729,16 @@ onUnmounted(() => {
               min-height: 0;
             }
           }
+          
+          .no-data {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--theme-text-muted);
+            font-size: 14px;
+            min-height: 100px;
+          }
         }
         
         .org-type-bar-container {
@@ -2440,6 +2751,16 @@ onUnmounted(() => {
             width: 100%;
             flex: 1;
             min-height: 0;
+          }
+          
+          .no-data {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--theme-text-muted);
+            font-size: 14px;
+            min-height: 100px;
           }
         }
       }
@@ -2504,13 +2825,6 @@ onUnmounted(() => {
             font-size: 18px;
             font-weight: 600;
             color: var(--theme-text);
-            
-            .stat-unit {
-              font-size: 12px;
-              font-weight: normal;
-              color: var(--theme-text-secondary);
-              margin-left: 2px;
-            }
           }
         }
       }
@@ -2552,6 +2866,16 @@ onUnmounted(() => {
         :deep(.echarts) {
           flex: 1;
           min-height: 0;
+        }
+        
+        .no-data {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--theme-text-muted);
+          font-size: 14px;
+          min-height: 100px;
         }
         
         &.map-chart {
@@ -2629,13 +2953,6 @@ onUnmounted(() => {
             font-size: 18px;
             font-weight: 600;
             color: var(--theme-text);
-            
-            .stat-unit {
-              font-size: 12px;
-              font-weight: normal;
-              color: var(--theme-text-secondary);
-              margin-left: 2px;
-            }
           }
         }
       }
@@ -2709,6 +3026,26 @@ onUnmounted(() => {
               }
             }
           }
+        }
+        
+        .no-data {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--theme-text-muted);
+          font-size: 14px;
+          min-height: 100px;
+        }
+        
+        .no-data-list {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--theme-text-muted);
+          font-size: 13px;
+          padding: 20px;
         }
         
         .central-device-list {
@@ -2790,6 +3127,16 @@ onUnmounted(() => {
   
   .panel-content {
     height: calc(100% - 45px);
+    
+    .no-data {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--theme-text-muted);
+      font-size: 14px;
+    }
     
     :deep(.el-carousel) {
       height: 100%;
@@ -2934,5 +3281,24 @@ onUnmounted(() => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--theme-text-muted);
+  font-size: 14px;
+}
+
+.no-data-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--theme-text-muted);
+  font-size: 13px;
 }
 </style>

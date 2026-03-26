@@ -141,10 +141,17 @@ class OrgRanking(BaseModel):
 @router.get("/overview/stats")
 def get_overview_stats(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     db: Session = Depends(get_db), 
     local_db: Session = Depends(get_local_db)
 ):
-    devices = local_db.query(LocalDevice).filter(LocalDevice.deleted == 0).all()
+    device_query = local_db.query(LocalDevice).filter(LocalDevice.deleted == 0)
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
     total_devices = len(devices)
     
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
@@ -165,9 +172,23 @@ def get_overview_stats(
     end_date = date.today()
     start_date = end_date - timedelta(days=30)
     
-    summaries = local_db.query(LocalDailyGpuUsageSummary).filter(
-        LocalDailyGpuUsageSummary.summary_date >= start_date,
-        LocalDailyGpuUsageSummary.summary_date <= end_date
+    device_ids = [d.id for d in devices]
+    
+    if not device_ids:
+        return OverviewStats(
+            total_devices=0,
+            total_memory_gb=0,
+            total_compute_tflops=0,
+            avg_gpu_usage=0,
+            memory_used_gb=0,
+            memory_usage_rate=0,
+            avg_memory_utilization=0
+        )
+    
+    summaries = local_db.query(LocalDailyDeviceSummary).filter(
+        LocalDailyDeviceSummary.summary_date >= start_date,
+        LocalDailyDeviceSummary.summary_date <= end_date,
+        LocalDailyDeviceSummary.device_id.in_(device_ids)
     ).all()
     
     if time_type == "work":
@@ -183,9 +204,6 @@ def get_overview_stats(
     avg_gpu_usage = round(sum(gpu_values) / len(gpu_values), 2) if gpu_values else 0
     memory_usage_rate = round(sum(memory_usage_values) / len(memory_usage_values), 2) if memory_usage_values else 0
     
-    # 计算显存利用率：基于显存使用时间比例
-    # 这里使用一个合理的计算方式，假设利用率是使用率的加权平均
-    # 实际项目中应根据具体业务逻辑调整
     avg_memory_utilization = round(memory_usage_rate * 0.8 + avg_gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
     
     memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
@@ -205,6 +223,7 @@ def get_overview_stats(
 def get_device_count_trend(
     time_range: str = Query("month"),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
     db: Session = Depends(get_db)
 ):
     params = TimeRangeParams(time_range=time_range)
@@ -216,13 +235,50 @@ def get_device_count_trend(
     current_date = start_date
     while current_date <= end_date:
         current_datetime = datetime.combine(current_date, datetime.max.time())
-        count = db.query(Device).filter(
+        query = db.query(Device).filter(
             Device.deleted == 0,
             Device.create_time <= current_datetime
-        ).count()
+        )
+        if network:
+            query = query.filter(Device.net_module_code == network)
+        count = query.count()
         result.append(TrendData(
             date=current_date.strftime("%Y-%m-%d"),
             value=count
+        ))
+        current_date += timedelta(days=1)
+    
+    return result
+
+
+@router.get("/trend/gpu-count")
+def get_gpu_count_trend(
+    time_range: str = Query("month"),
+    time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    db: Session = Depends(get_db)
+):
+    params = TimeRangeParams(time_range=time_range)
+    start_date, end_date = params.get_date_range()
+    
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
+    result = []
+    current_date = start_date
+    while current_date <= end_date:
+        current_datetime = datetime.combine(current_date, datetime.max.time())
+        query = db.query(Device).filter(
+            Device.deleted == 0,
+            Device.create_time <= current_datetime
+        )
+        if network:
+            query = query.filter(Device.net_module_code == network)
+        
+        devices = query.all()
+        total_gpu_count = sum((device.gpu_count or 0) for device in devices)
+        result.append(TrendData(
+            date=current_date.strftime("%Y-%m-%d"),
+            value=total_gpu_count
         ))
         current_date += timedelta(days=1)
     
@@ -233,6 +289,7 @@ def get_device_count_trend(
 def get_memory_total_trend(
     time_range: str = Query("month"),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
     db: Session = Depends(get_db)
 ):
     params = TimeRangeParams(time_range=time_range)
@@ -245,10 +302,13 @@ def get_memory_total_trend(
     while current_date <= end_date:
         current_datetime = datetime.combine(current_date, datetime.max.time())
         
-        devices = db.query(Device).filter(
+        query = db.query(Device).filter(
             Device.deleted == 0,
             Device.create_time <= current_datetime
-        ).all()
+        )
+        if network:
+            query = query.filter(Device.net_module_code == network)
+        devices = query.all()
         
         total_memory_gb = 0
         for device in devices:
@@ -271,6 +331,7 @@ def get_memory_total_trend(
 def get_compute_total_trend(
     time_range: str = Query("month"),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
     db: Session = Depends(get_db)
 ):
     params = TimeRangeParams(time_range=time_range)
@@ -283,10 +344,13 @@ def get_compute_total_trend(
     while current_date <= end_date:
         current_datetime = datetime.combine(current_date, datetime.max.time())
         
-        devices = db.query(Device).filter(
+        query = db.query(Device).filter(
             Device.deleted == 0,
             Device.create_time <= current_datetime
-        ).all()
+        )
+        if network:
+            query = query.filter(Device.net_module_code == network)
+        devices = query.all()
         
         total_compute_tflops = 0
         for device in devices:
@@ -311,6 +375,8 @@ def get_compute_total_trend(
 def get_gpu_usage_trend(
     time_range: str = Query("month"),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     params = TimeRangeParams(time_range=time_range)
@@ -319,13 +385,31 @@ def get_gpu_usage_trend(
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
-    summaries = local_db.query(LocalDailyGpuUsageSummary).filter(
-        LocalDailyGpuUsageSummary.summary_date >= start_datetime,
-        LocalDailyGpuUsageSummary.summary_date <= end_datetime
-    ).order_by(LocalDailyGpuUsageSummary.summary_date).all()
+    device_query = local_db.query(LocalDevice.id).filter(LocalDevice.deleted == 0)
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    device_ids = [d.id for d in device_query.all()]
     
-    result = []
+    if not device_ids:
+        return []
+    
+    summaries = local_db.query(LocalDailyDeviceSummary).filter(
+        LocalDailyDeviceSummary.summary_date >= start_datetime,
+        LocalDailyDeviceSummary.summary_date <= end_datetime,
+        LocalDailyDeviceSummary.device_id.in_(device_ids)
+    ).order_by(LocalDailyDeviceSummary.summary_date).all()
+    
+    daily_data = {}
     for s in summaries:
+        date_key = s.summary_date.strftime("%Y-%m-%d")
+        if date_key not in daily_data:
+            daily_data[date_key] = {
+                "gpu_values": [],
+                "memory_values": []
+            }
+        
         if time_type == "work":
             gpu_value = float(s.avg_gpu_usage_rate_work or 0)
         elif time_type == "nonwork":
@@ -334,12 +418,20 @@ def get_gpu_usage_trend(
             gpu_value = float(s.avg_gpu_usage_rate or 0)
         
         memory_usage_rate = float(s.avg_memory_usage_rate or 0)
-        # 计算显存利用率：基于显存使用时间比例
-        memory_utilization = round(memory_usage_rate * 0.8 + gpu_value * 0.2, 2) if memory_usage_rate > 0 else 0
+        daily_data[date_key]["gpu_values"].append(gpu_value)
+        daily_data[date_key]["memory_values"].append(memory_usage_rate)
+    
+    result = []
+    for date_key in sorted(daily_data.keys()):
+        gpu_values = daily_data[date_key]["gpu_values"]
+        memory_values = daily_data[date_key]["memory_values"]
+        gpu_usage = round(sum(gpu_values) / len(gpu_values), 2) if gpu_values else 0
+        memory_usage_rate = round(sum(memory_values) / len(memory_values), 2) if memory_values else 0
+        memory_utilization = round(memory_usage_rate * 0.8 + gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
         
         result.append({
-            "date": s.summary_date.strftime("%Y-%m-%d"),
-            "gpu_usage": gpu_value,
+            "date": date_key,
+            "gpu_usage": gpu_usage,
             "memory_usage_rate": memory_usage_rate,
             "memory_utilization": memory_utilization
         })
@@ -351,6 +443,8 @@ def get_gpu_usage_trend(
 def get_usage_warning_bar(
     time_range: str = Query("month"),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     params = TimeRangeParams(time_range=time_range)
@@ -366,14 +460,35 @@ def get_usage_warning_bar(
     else:
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
     
-    org_summaries = local_db.query(
+    device_query = local_db.query(LocalDevice.id, LocalDevice.organization_id).filter(LocalDevice.deleted == 0)
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    device_map = {d.id: d.organization_id for d in device_query.all()}
+    device_ids = list(device_map.keys())
+    
+    if not device_ids:
+        return []
+    
+    device_org_map = {}
+    for dev_id, org_id in device_map.items():
+        if org_id not in device_org_map:
+            device_org_map[org_id] = []
+        device_org_map[org_id].append(dev_id)
+    org_ids_filtered = list(device_org_map.keys())
+    
+    org_query = local_db.query(
         LocalOrgGpuUsageSummary.organization_id3,
         LocalOrgGpuUsageSummary.organization_name3,
         func.avg(usage_field).label('avg_usage')
     ).filter(
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
-        LocalOrgGpuUsageSummary.summary_time <= end_datetime
-    ).group_by(
+        LocalOrgGpuUsageSummary.summary_time <= end_datetime,
+        LocalOrgGpuUsageSummary.organization_id3.in_(org_ids_filtered)
+    )
+    
+    org_summaries = org_query.group_by(
         LocalOrgGpuUsageSummary.organization_id3,
         LocalOrgGpuUsageSummary.organization_name3
     ).all()
@@ -427,9 +542,16 @@ def get_org_groups(local_db: Session = Depends(get_local_db)):
 @router.get("/distribution/org-type")
 def get_org_type_distribution(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     groups = get_second_level_groups_cached(local_db)
+    gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
+    
+    end_date = date.today()
+    start_date = end_date - timedelta(days=30)
+    
     result = {}
     for group in groups:
         org_ids = get_org_ids_by_parent_cached(local_db, group.id)
@@ -437,78 +559,154 @@ def get_org_type_distribution(
             LocalOrganization.id.in_(org_ids),
             LocalOrganization.deleted == 0
         ).all()
-        
+
         group_data = []
         for org in orgs:
-            count = local_db.query(LocalDevice).filter(
+            device_query = local_db.query(LocalDevice).filter(
                 LocalDevice.organization_id == org.id,
                 LocalDevice.deleted == 0
-            ).count()
+            )
+            if network:
+                device_query = device_query.filter(LocalDevice.net_module_code == network)
+            if purpose is not None:
+                device_query = device_query.filter(LocalDevice.purpose == purpose)
+            count = device_query.count()
             if count > 0:
-                group_data.append({"name": org.name, "value": count})
-        
+                devices = device_query.all()
+                
+                gpu_count = 0
+                memory_gb = 0
+                compute_tflops = 0
+                
+                for device in devices:
+                    gpu_num = device.gpu_count or 0
+                    gpu_count += gpu_num
+                    gpu_model = device.gpu_model or ""
+                    gpu_info = gpu_infos.get(gpu_model)
+                    if gpu_info:
+                        memory_gb += float(gpu_info.memory_total_gb or 0) * gpu_num
+                        compute_tflops += float(gpu_info.tflops_fp16 or 0) * gpu_num
+                
+                device_ids = [d.id for d in devices]
+                if time_type == "work":
+                    usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_work
+                elif time_type == "nonwork":
+                    usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_nonwork
+                else:
+                    usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
+                
+                avg_gpu_usage = 0
+                if device_ids:
+                    org_usage = local_db.query(
+                        func.avg(usage_field).label('avg_usage')
+                    ).filter(
+                        LocalOrgGpuUsageSummary.organization_id3 == org.id,
+                        LocalOrgGpuUsageSummary.summary_time >= start_date,
+                        LocalOrgGpuUsageSummary.summary_time <= end_date
+                    ).first()
+                    avg_gpu_usage = round(float(org_usage.avg_usage or 0), 2) if org_usage and org_usage.avg_usage else 0
+                
+                group_data.append({
+                    "name": org.name,
+                    "value": count,
+                    "org_id": org.id,
+                    "gpu_count": gpu_count,
+                    "memory_gb": round(memory_gb, 2),
+                    "compute_tflops": round(compute_tflops, 2),
+                    "avg_gpu_usage": avg_gpu_usage
+                })
+
         result[group.name] = group_data
-    
+
     return result
 
 
 @router.get("/distribution/network")
-def get_network_distribution(local_db: Session = Depends(get_local_db)):
+def get_network_distribution(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     networks = local_db.query(LocalNetwork).filter(LocalNetwork.deleted == 0).all()
     network_map = {n.code: n.name for n in networks}
-    
-    result = local_db.query(
+
+    query = local_db.query(
         LocalDevice.net_module_code,
         func.count(LocalDevice.id).label('count')
     ).filter(
         LocalDevice.deleted == 0
-    ).group_by(
+    )
+
+    if network:
+        query = query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
+
+    result = query.group_by(
         LocalDevice.net_module_code
     ).all()
-    
+
     distribution = {}
     for r in result:
         net_name = network_map.get(r.net_module_code, r.net_module_code or "未知")
         if net_name not in distribution:
             distribution[net_name] = 0
         distribution[net_name] += r.count
-    
+
     return [{"name": k, "value": v} for k, v in distribution.items()]
 
 
+@router.get("/network/list")
+def get_network_list(local_db: Session = Depends(get_local_db)):
+    networks = local_db.query(LocalNetwork).filter(
+        LocalNetwork.deleted == 0
+    ).order_by(LocalNetwork.name).all()
+    
+    return [{"code": n.code, "name": n.name} for n in networks]
+
+
 @router.get("/distribution/network-by-org")
-def get_network_distribution_by_org(local_db: Session = Depends(get_local_db)):
+def get_network_distribution_by_org(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     networks = local_db.query(LocalNetwork).filter(LocalNetwork.deleted == 0).all()
     network_map = {n.code: n.name for n in networks}
     network_names = sorted([n.name for n in networks])
-    
+
     orgs = local_db.query(LocalOrganization).filter(
         LocalOrganization.deleted == 0
     ).all()
-    
+
     result = []
     for org in orgs:
-        devices = local_db.query(LocalDevice).filter(
+        device_query = local_db.query(LocalDevice).filter(
             LocalDevice.organization_id == org.id,
             LocalDevice.deleted == 0
-        ).all()
-        
+        )
+        if network:
+            device_query = device_query.filter(LocalDevice.net_module_code == network)
+        if purpose is not None:
+            device_query = device_query.filter(LocalDevice.purpose == purpose)
+        devices = device_query.all()
+
         if not devices:
             continue
-        
+
         network_counts = {net: 0 for net in network_names}
         for device in devices:
             net_name = network_map.get(device.net_module_code, device.net_module_code or "未知")
             if net_name not in network_counts:
                 network_counts[net_name] = 0
             network_counts[net_name] += 1
-        
+
         result.append({
             "org_name": org.name,
             "networks": network_counts,
             "total": len(devices)
         })
-    
+
     return {
         "networks": network_names,
         "data": sorted(result, key=lambda x: x["total"], reverse=True)
@@ -516,12 +714,22 @@ def get_network_distribution_by_org(local_db: Session = Depends(get_local_db)):
 
 
 @router.get("/distribution/gpu-tier")
-def get_gpu_tier_distribution(local_db: Session = Depends(get_local_db)):
+def get_gpu_tier_distribution(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
+
     tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
-    
-    devices = local_db.query(LocalDevice).filter(LocalDevice.deleted == 0).all()
+
+    device_query = local_db.query(LocalDevice).filter(LocalDevice.deleted == 0)
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
+
     for device in devices:
         gpu_model = device.gpu_model or ""
         gpu_info = gpu_infos.get(gpu_model)
@@ -537,7 +745,7 @@ def get_gpu_tier_distribution(local_db: Session = Depends(get_local_db)):
                 tier_counts["unknown"] += gpu_count
         else:
             tier_counts["unknown"] += gpu_count
-    
+
     return [
         {"name": "高端卡", "value": tier_counts["high"]},
         {"name": "中端卡", "value": tier_counts["medium"]},
@@ -547,25 +755,34 @@ def get_gpu_tier_distribution(local_db: Session = Depends(get_local_db)):
 
 
 @router.get("/distribution/gpu-tier-by-org")
-def get_gpu_tier_by_org_distribution(local_db: Session = Depends(get_local_db)):
+def get_gpu_tier_by_org_distribution(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
+
     orgs = local_db.query(LocalOrganization).filter(
         LocalOrganization.deleted == 0
     ).all()
-    
+
     result = []
     for org in orgs:
-        devices = local_db.query(LocalDevice).filter(
+        device_query = local_db.query(LocalDevice).filter(
             LocalDevice.organization_id == org.id,
             LocalDevice.deleted == 0
-        ).all()
-        
+        )
+        if network:
+            device_query = device_query.filter(LocalDevice.net_module_code == network)
+        if purpose is not None:
+            device_query = device_query.filter(LocalDevice.purpose == purpose)
+        devices = device_query.all()
+
         if not devices:
             continue
-        
+
         tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
-        
+
         for device in devices:
             gpu_model = device.gpu_model or ""
             gpu_info = gpu_infos.get(gpu_model)
@@ -581,7 +798,7 @@ def get_gpu_tier_by_org_distribution(local_db: Session = Depends(get_local_db)):
                     tier_counts["unknown"] += gpu_count
             else:
                 tier_counts["unknown"] += gpu_count
-        
+
         result.append({
             "org_name": org.name,
             "high": tier_counts["high"],
@@ -590,48 +807,68 @@ def get_gpu_tier_by_org_distribution(local_db: Session = Depends(get_local_db)):
             "unknown": tier_counts["unknown"],
             "total": sum(tier_counts.values())
         })
-    
+
     return sorted(result, key=lambda x: x["total"], reverse=True)
 
 
 @router.get("/distribution/purpose")
-def get_purpose_distribution(local_db: Session = Depends(get_local_db)):
+def get_purpose_distribution(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     purpose_map = get_purpose_map(local_db)
-    
-    result = local_db.query(
+
+    query = local_db.query(
         LocalDevice.purpose,
         func.sum(LocalDevice.gpu_count).label('count')
     ).filter(
         LocalDevice.deleted == 0
-    ).group_by(
+    )
+
+    if network:
+        query = query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
+
+    result = query.group_by(
         LocalDevice.purpose
     ).all()
-    
+
     return [
-        {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0} 
+        {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0}
         for r in result
     ]
 
 
 @router.get("/distribution/purpose-by-org")
-def get_purpose_distribution_by_org(local_db: Session = Depends(get_local_db)):
+def get_purpose_distribution_by_org(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     purpose_map = get_purpose_map(local_db)
     purposes = list(purpose_map.values())
-    
+
     orgs = local_db.query(LocalOrganization).filter(
         LocalOrganization.deleted == 0
     ).all()
-    
+
     result = []
     for org in orgs:
-        devices = local_db.query(LocalDevice).filter(
+        device_query = local_db.query(LocalDevice).filter(
             LocalDevice.organization_id == org.id,
             LocalDevice.deleted == 0
-        ).all()
-        
+        )
+        if network:
+            device_query = device_query.filter(LocalDevice.net_module_code == network)
+        if purpose is not None:
+            device_query = device_query.filter(LocalDevice.purpose == purpose)
+        devices = device_query.all()
+
         if not devices:
             continue
-        
+
         purpose_counts = {p: 0 for p in purposes}
         total_gpus = 0
         for device in devices:
@@ -641,13 +878,13 @@ def get_purpose_distribution_by_org(local_db: Session = Depends(get_local_db)):
                 purpose_counts[purpose_name] = 0
             purpose_counts[purpose_name] += gpu_count
             total_gpus += gpu_count
-        
+
         result.append({
             "org_name": org.name,
             "purposes": purpose_counts,
             "total": total_gpus
         })
-    
+
     return {
         "purposes": purposes,
         "data": sorted(result, key=lambda x: x["total"], reverse=True)
@@ -685,29 +922,36 @@ def get_purpose_dict(local_db: Session = Depends(get_local_db)):
 @router.get("/map/province")
 def get_province_distribution(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     local_org_ids = get_org_ids_by_type_cached(local_db, 'local')
-    
+
     orgs = local_db.query(LocalOrganization).filter(
         LocalOrganization.id.in_(local_org_ids)
     ).all()
     org_map = {o.id: o for o in orgs}
-    
-    devices = local_db.query(LocalDevice).filter(
+
+    device_query = local_db.query(LocalDevice).filter(
         LocalDevice.organization_id.in_(local_org_ids),
         LocalDevice.deleted == 0
-    ).all()
-    
+    )
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
+
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
+
     province_stats = {}
-    
+
     for device in devices:
         org = org_map.get(device.organization_id)
         if not org or not org.province:
             continue
-        
+
         province = org.province
         if province not in province_stats:
             province_stats[province] = {
@@ -719,22 +963,22 @@ def get_province_distribution(
                 "compute_tflops": 0,
                 "org_ids": set()
             }
-        
+
         province_stats[province]["value"] += 1
         province_stats[province]["org_ids"].add(device.organization_id)
-        
+
         gpu_count = device.gpu_count or 0
         province_stats[province]["gpu_count"] += gpu_count
-        
+
         gpu_model = device.gpu_model or ""
         gpu_info = gpu_infos.get(gpu_model)
         if gpu_info:
             province_stats[province]["memory_gb"] += float(gpu_info.memory_total_gb or 0) * gpu_count
             province_stats[province]["compute_tflops"] += float(gpu_info.tflops_fp16 or 0) * gpu_count
-    
+
     end_date = date.today()
     start_date = end_date - timedelta(days=30)
-    
+
     org_usage_data = {}
     for summary in local_db.query(LocalOrgGpuUsageSummary).filter(
         LocalOrgGpuUsageSummary.summary_time >= start_date,
@@ -743,17 +987,17 @@ def get_province_distribution(
         org_name = summary.organization_name3
         if org_name not in org_usage_data:
             org_usage_data[org_name] = []
-        
+
         if time_type == "work":
             val = summary.avg_gpu_usage_rate_work
         elif time_type == "nonwork":
             val = summary.avg_gpu_usage_rate_nonwork
         else:
             val = summary.avg_gpu_usage_rate
-        
+
         if val is not None:
             org_usage_data[org_name].append(float(val))
-    
+
     result = []
     for province, data in province_stats.items():
         all_usages = []
@@ -761,7 +1005,7 @@ def get_province_distribution(
             org = org_map.get(org_id)
             if org and org.name:
                 all_usages.extend(org_usage_data.get(org.name, []))
-        
+
         result.append({
             "name": data["name"],
             "code": data["code"],
@@ -771,39 +1015,46 @@ def get_province_distribution(
             "compute_tflops": round(data["compute_tflops"], 2),
             "avg_gpu_usage": round(sum(all_usages) / len(all_usages), 2) if all_usages else 0
         })
-    
+
     return result
 
 
 @router.get("/bubble/central")
 def get_central_bubble(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
-    
+
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
+
     orgs = local_db.query(LocalOrganization).filter(
         LocalOrganization.id.in_(central_org_ids),
         LocalOrganization.deleted == 0
     ).all()
-    
+
     result = []
     for org in orgs:
-        devices = local_db.query(LocalDevice).filter(
+        device_query = local_db.query(LocalDevice).filter(
             LocalDevice.organization_id == org.id,
             LocalDevice.deleted == 0
-        ).all()
-        
+        )
+        if network:
+            device_query = device_query.filter(LocalDevice.net_module_code == network)
+        if purpose is not None:
+            device_query = device_query.filter(LocalDevice.purpose == purpose)
+        devices = device_query.all()
+
         if not devices:
             continue
-        
+
         device_count = len(devices)
         gpu_count = 0
         memory_gb = 0
         compute_tflops = 0
-        
+
         for device in devices:
             dev_gpu_count = device.gpu_count or 0
             gpu_count += dev_gpu_count
@@ -812,7 +1063,7 @@ def get_central_bubble(
             if gpu_info:
                 memory_gb += float(gpu_info.memory_total_gb or 0) * dev_gpu_count
                 compute_tflops += float(gpu_info.tflops_fp16 or 0) * dev_gpu_count
-        
+
         result.append({
             "org_id": org.id,
             "name": org.name,
@@ -821,28 +1072,35 @@ def get_central_bubble(
             "memory_gb": round(memory_gb, 2),
             "compute_tflops": round(compute_tflops, 2)
         })
-    
+
     return result
 
 
 @router.get("/local/stats")
 def get_local_stats(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     local_org_ids = get_org_ids_by_type_cached(local_db, 'local')
-    
-    devices = local_db.query(LocalDevice).filter(
+
+    device_query = local_db.query(LocalDevice).filter(
         LocalDevice.organization_id.in_(local_org_ids),
         LocalDevice.deleted == 0
-    ).all()
-    
+    )
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
+
     total_devices = len(devices)
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
+
     total_memory_gb = 0
     total_compute_tflops = 0
-    
+
     for device in devices:
         gpu_count = device.gpu_count or 0
         gpu_model = device.gpu_model or ""
@@ -850,36 +1108,48 @@ def get_local_stats(
         if gpu_info:
             total_memory_gb += float(gpu_info.memory_total_gb or 0) * gpu_count
             total_compute_tflops += float(gpu_info.tflops_fp16 or 0) * gpu_count
+
+    device_org_ids = list(set([d.organization_id for d in devices if d.organization_id]))
     
+    if not device_org_ids:
+        return {
+            "total_devices": 0,
+            "total_memory_gb": 0,
+            "total_compute_tflops": 0,
+            "avg_gpu_usage": 0,
+            "memory_used_gb": 0,
+            "memory_usage_rate": 0,
+            "avg_memory_utilization": 0
+        }
+
     end_date = date.today()
     start_date = end_date - timedelta(days=30)
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
-    
+
     if time_type == "work":
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_work
     elif time_type == "nonwork":
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_nonwork
     else:
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
-    
+
     org_summaries = local_db.query(
         func.avg(usage_field).label('avg_usage'),
         func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
     ).filter(
-        LocalOrgGpuUsageSummary.organization_id3.in_(local_org_ids),
+        LocalOrgGpuUsageSummary.organization_id3.in_(device_org_ids),
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
         LocalOrgGpuUsageSummary.summary_time <= end_datetime
     ).first()
-    
+
     avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
     memory_usage_rate = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
-    
-    # 计算显存利用率：基于显存使用时间比例
+
     avg_memory_utilization = round(memory_usage_rate * 0.8 + avg_gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
-    
+
     memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
-    
+
     return {
         "total_devices": total_devices,
         "total_memory_gb": round(total_memory_gb, 2),
@@ -892,18 +1162,27 @@ def get_local_stats(
 
 
 @router.get("/local/gpu-tier")
-def get_local_gpu_tier(local_db: Session = Depends(get_local_db)):
+def get_local_gpu_tier(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     local_org_ids = get_org_ids_by_type_cached(local_db, 'local')
-    
+
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
-    devices = local_db.query(LocalDevice).filter(
+
+    device_query = local_db.query(LocalDevice).filter(
         LocalDevice.organization_id.in_(local_org_ids),
         LocalDevice.deleted == 0
-    ).all()
-    
+    )
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
+
     tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
-    
+
     for device in devices:
         gpu_model = device.gpu_model or ""
         gpu_count = device.gpu_count or 0
@@ -919,7 +1198,7 @@ def get_local_gpu_tier(local_db: Session = Depends(get_local_db)):
                 tier_counts["unknown"] += gpu_count
         else:
             tier_counts["unknown"] += gpu_count
-    
+
     return [
         {"name": "高端卡", "value": tier_counts["high"]},
         {"name": "中端卡", "value": tier_counts["medium"]},
@@ -929,23 +1208,34 @@ def get_local_gpu_tier(local_db: Session = Depends(get_local_db)):
 
 
 @router.get("/local/purpose")
-def get_local_purpose(local_db: Session = Depends(get_local_db)):
+def get_local_purpose(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     local_org_ids = get_org_ids_by_type_cached(local_db, 'local')
-    
+
     purpose_map = get_purpose_map(local_db)
-    
-    result = local_db.query(
+
+    query = local_db.query(
         LocalDevice.purpose,
         func.sum(LocalDevice.gpu_count).label('count')
     ).filter(
         LocalDevice.organization_id.in_(local_org_ids),
         LocalDevice.deleted == 0
-    ).group_by(
+    )
+
+    if network:
+        query = query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
+
+    result = query.group_by(
         LocalDevice.purpose
     ).all()
-    
+
     return [
-        {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0} 
+        {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0}
         for r in result
     ]
 
@@ -953,18 +1243,19 @@ def get_local_purpose(local_db: Session = Depends(get_local_db)):
 @router.get("/local/trend")
 def get_local_trend(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
     local_db: Session = Depends(get_local_db)
 ):
     local_org_ids = get_org_ids_by_type_cached(local_db, 'local')
-    
+
     end_date = date.today()
     start_date = end_date - timedelta(days=7)
-    
+
     summaries = local_db.query(LocalDailyGpuUsageSummary).filter(
         LocalDailyGpuUsageSummary.summary_date >= start_date,
         LocalDailyGpuUsageSummary.summary_date <= end_date
     ).order_by(LocalDailyGpuUsageSummary.summary_date).all()
-    
+
     result = []
     for s in summaries:
         if time_type == "work":
@@ -977,28 +1268,35 @@ def get_local_trend(
             "date": s.summary_date.strftime("%Y-%m-%d"),
             "value": value
         })
-    
+
     return result
 
 
 @router.get("/central/stats")
 def get_central_stats(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
-    
-    devices = local_db.query(LocalDevice).filter(
+
+    device_query = local_db.query(LocalDevice).filter(
         LocalDevice.organization_id.in_(central_org_ids),
         LocalDevice.deleted == 0
-    ).all()
-    
+    )
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
+
     total_devices = len(devices)
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
+
     total_memory_gb = 0
     total_compute_tflops = 0
-    
+
     for device in devices:
         gpu_count = device.gpu_count or 0
         gpu_model = device.gpu_model or ""
@@ -1006,36 +1304,48 @@ def get_central_stats(
         if gpu_info:
             total_memory_gb += float(gpu_info.memory_total_gb or 0) * gpu_count
             total_compute_tflops += float(gpu_info.tflops_fp16 or 0) * gpu_count
+
+    device_org_ids = list(set([d.organization_id for d in devices if d.organization_id]))
     
+    if not device_org_ids:
+        return {
+            "total_devices": 0,
+            "total_memory_gb": 0,
+            "total_compute_tflops": 0,
+            "avg_gpu_usage": 0,
+            "memory_used_gb": 0,
+            "memory_usage_rate": 0,
+            "avg_memory_utilization": 0
+        }
+
     end_date = date.today()
     start_date = end_date - timedelta(days=30)
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
-    
+
     if time_type == "work":
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_work
     elif time_type == "nonwork":
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate_nonwork
     else:
         usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
-    
+
     org_summaries = local_db.query(
         func.avg(usage_field).label('avg_usage'),
         func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage')
     ).filter(
-        LocalOrgGpuUsageSummary.organization_id3.in_(central_org_ids),
+        LocalOrgGpuUsageSummary.organization_id3.in_(device_org_ids),
         LocalOrgGpuUsageSummary.summary_time >= start_datetime,
         LocalOrgGpuUsageSummary.summary_time <= end_datetime
     ).first()
-    
+
     avg_gpu_usage = round(float(org_summaries.avg_usage or 0), 2) if org_summaries and org_summaries.avg_usage else 0
     memory_usage_rate = round(float(org_summaries.avg_memory_usage or 0), 2) if org_summaries and org_summaries.avg_memory_usage else 0
-    
-    # 计算显存利用率：基于显存使用时间比例
+
     avg_memory_utilization = round(memory_usage_rate * 0.8 + avg_gpu_usage * 0.2, 2) if memory_usage_rate > 0 else 0
-    
+
     memory_used_gb = round(total_memory_gb * memory_usage_rate / 100, 2) if total_memory_gb > 0 and memory_usage_rate > 0 else 0
-    
+
     return {
         "total_devices": total_devices,
         "total_memory_gb": round(total_memory_gb, 2),
@@ -1048,18 +1358,27 @@ def get_central_stats(
 
 
 @router.get("/central/gpu-tier")
-def get_central_gpu_tier(local_db: Session = Depends(get_local_db)):
+def get_central_gpu_tier(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
-    
+
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
-    
-    devices = local_db.query(LocalDevice).filter(
+
+    device_query = local_db.query(LocalDevice).filter(
         LocalDevice.organization_id.in_(central_org_ids),
         LocalDevice.deleted == 0
-    ).all()
-    
+    )
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    devices = device_query.all()
+
     tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
-    
+
     for device in devices:
         gpu_model = device.gpu_model or ""
         gpu_count = device.gpu_count or 1
@@ -1075,7 +1394,7 @@ def get_central_gpu_tier(local_db: Session = Depends(get_local_db)):
                 tier_counts["unknown"] += gpu_count
         else:
             tier_counts["unknown"] += gpu_count
-    
+
     return [
         {"name": "高端卡", "value": tier_counts["high"]},
         {"name": "中端卡", "value": tier_counts["medium"]},
@@ -1085,23 +1404,34 @@ def get_central_gpu_tier(local_db: Session = Depends(get_local_db)):
 
 
 @router.get("/central/purpose")
-def get_central_purpose(local_db: Session = Depends(get_local_db)):
+def get_central_purpose(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
-    
+
     purpose_map = get_purpose_map(local_db)
-    
-    result = local_db.query(
+
+    query = local_db.query(
         LocalDevice.purpose,
         func.sum(LocalDevice.gpu_count).label('count')
     ).filter(
         LocalDevice.organization_id.in_(central_org_ids),
         LocalDevice.deleted == 0
-    ).group_by(
+    )
+
+    if network:
+        query = query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
+
+    result = query.group_by(
         LocalDevice.purpose
     ).all()
-    
+
     return [
-        {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0} 
+        {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0}
         for r in result
     ]
 
@@ -1109,18 +1439,19 @@ def get_central_purpose(local_db: Session = Depends(get_local_db)):
 @router.get("/central/trend")
 def get_central_trend(
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
     local_db: Session = Depends(get_local_db)
 ):
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
-    
+
     end_date = date.today()
     start_date = end_date - timedelta(days=7)
-    
+
     summaries = local_db.query(LocalDailyGpuUsageSummary).filter(
         LocalDailyGpuUsageSummary.summary_date >= start_date,
         LocalDailyGpuUsageSummary.summary_date <= end_date
     ).order_by(LocalDailyGpuUsageSummary.summary_date).all()
-    
+
     result = []
     for s in summaries:
         if time_type == "work":
@@ -1133,11 +1464,11 @@ def get_central_trend(
             "date": s.summary_date.strftime("%Y-%m-%d"),
             "value": value
         })
-    
+
     return result
 
 
-def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', time_type='work'):
+def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', time_type='work', network=None, purpose=None):
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
     
     time_range_days = {
@@ -1168,6 +1499,12 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
         LocalOrganization.deleted == 0
     )
     
+    if network:
+        query = query.filter(LocalDevice.net_module_code == network)
+    
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
+    
     if group_id:
         org_ids = get_org_ids_by_parent_cached(local_db, group_id)
         query = query.filter(LocalOrganization.id.in_(org_ids))
@@ -1179,10 +1516,15 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
     
     rankings = []
     for r in result:
-        devices = local_db.query(LocalDevice).filter(
+        device_query = local_db.query(LocalDevice).filter(
             LocalDevice.organization_id == r.id,
             LocalDevice.deleted == 0
-        ).all()
+        )
+        if network:
+            device_query = device_query.filter(LocalDevice.net_module_code == network)
+        if purpose is not None:
+            device_query = device_query.filter(LocalDevice.purpose == purpose)
+        devices = device_query.all()
         
         compute_total = 0
         
@@ -1248,9 +1590,11 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
 def get_all_ranking(
     time_range: str = Query('month'),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
-    return calculate_org_ranking_cached(local_db, time_range=time_range, time_type=time_type)
+    return calculate_org_ranking_cached(local_db, time_range=time_range, time_type=time_type, network=network, purpose=purpose)
 
 
 @router.get("/ranking/group/{group_id}")
@@ -1258,21 +1602,25 @@ def get_group_ranking(
     group_id: int,
     time_range: str = Query('month'),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
-    return calculate_org_ranking_cached(local_db, group_id=group_id, time_range=time_range, time_type=time_type)
+    return calculate_org_ranking_cached(local_db, group_id=group_id, time_range=time_range, time_type=time_type, network=network, purpose=purpose)
 
 
 @router.get("/ranking/groups")
 def get_all_group_rankings(
     time_range: str = Query('month'),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     groups = get_second_level_groups_cached(local_db)
     result = {}
     for group in groups:
-        rankings = calculate_org_ranking_cached(local_db, group_id=group.id, time_range=time_range, time_type=time_type)
+        rankings = calculate_org_ranking_cached(local_db, group_id=group.id, time_range=time_range, time_type=time_type, network=network, purpose=purpose)
         result[group.name] = rankings[:5]
     return result
 
@@ -1281,18 +1629,20 @@ def get_all_group_rankings(
 def get_local_ranking(
     time_range: str = Query('month'),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
-    return calculate_org_ranking_cached(local_db, time_range=time_range, time_type=time_type)
+    return calculate_org_ranking_cached(local_db, time_range=time_range, time_type=time_type, purpose=purpose)
 
 
 @router.get("/ranking/central")
 def get_central_ranking(
     time_range: str = Query('month'),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
-    return calculate_org_ranking_cached(local_db, time_range=time_range, time_type=time_type)
+    return calculate_org_ranking_cached(local_db, time_range=time_range, time_type=time_type, purpose=purpose)
 
 
 @router.get("/ranking/province/{province_name}")
@@ -1300,6 +1650,7 @@ def get_province_ranking(
     province_name: str,
     time_range: str = Query('month'),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
@@ -1332,6 +1683,9 @@ def get_province_ranking(
         LocalOrganization.deleted == 0,
         LocalOrganization.province == province_name
     )
+    
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
     
     result = query.group_by(
         LocalOrganization.id,
@@ -1415,6 +1769,8 @@ def get_carousel_usage_trend(
     end_date: str = Query(None, description="结束日期，格式YYYY-MM-DD"),
     drill_date: str = Query(None, description="下钻日期，格式YYYY-MM-DD，返回该日24小时数据"),
     drill_org_id: int = Query(None, description="下钻单位ID"),
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
     if drill_date:
@@ -1431,15 +1787,23 @@ def get_carousel_usage_trend(
             is_work = None
         
         if drill_org_id:
-            hourly_stats = local_db.query(LocalOrgHourlyStats).filter(
+            hourly_stats_query = local_db.query(LocalOrgHourlyStats).filter(
                 LocalOrgHourlyStats.organization_id3 == drill_org_id,
                 func.date(LocalOrgHourlyStats.stat_date) == target_date
             )
-            
+
             if is_work is not None:
-                hourly_stats = hourly_stats.filter(LocalOrgHourlyStats.is_work_hour == is_work)
-            
-            hourly_stats = hourly_stats.order_by(LocalOrgHourlyStats.stat_hour).all()
+                hourly_stats_query = hourly_stats_query.filter(LocalOrgHourlyStats.is_work_hour == is_work)
+
+            if network:
+                network_org_ids = local_db.query(LocalDevice.organization_id).filter(
+                    LocalDevice.net_module_code == network,
+                    LocalDevice.deleted == 0
+                ).distinct().all()
+                network_org_ids = [oid[0] for oid in network_org_ids]
+                hourly_stats_query = hourly_stats_query.filter(LocalOrgHourlyStats.organization_id3.in_(network_org_ids))
+
+            hourly_stats = hourly_stats_query.order_by(LocalOrgHourlyStats.stat_hour).all()
             
             hour_trend = []
             for h in hourly_stats:
@@ -1530,6 +1894,28 @@ def get_carousel_usage_trend(
     org_ids_filter = None
     if org_type:
         org_ids_filter = get_org_ids_by_type_cached(local_db, org_type)
+
+    if network:
+        network_org_ids = local_db.query(LocalDevice.organization_id).filter(
+            LocalDevice.net_module_code == network,
+            LocalDevice.deleted == 0
+        ).distinct().all()
+        network_org_ids = [oid[0] for oid in network_org_ids]
+        if org_ids_filter is not None:
+            org_ids_filter = list(set(org_ids_filter) & set(network_org_ids))
+        else:
+            org_ids_filter = network_org_ids
+    
+    if purpose is not None:
+        purpose_org_ids = local_db.query(LocalDevice.organization_id).filter(
+            LocalDevice.purpose == purpose,
+            LocalDevice.deleted == 0
+        ).distinct().all()
+        purpose_org_ids = [oid[0] for oid in purpose_org_ids]
+        if org_ids_filter is not None:
+            org_ids_filter = list(set(org_ids_filter) & set(purpose_org_ids))
+        else:
+            org_ids_filter = purpose_org_ids
     
     if time_grain == "week":
         date_format = 'YYYY-"W"IW'
@@ -1773,6 +2159,7 @@ def get_org_usage_trend(
     start_date: str = Query(None, description="开始日期"),
     end_date: str = Query(None, description="结束日期"),
     purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    network: str = Query(None, description="网络分类代码"),
     local_db: Session = Depends(get_local_db)
 ):
     org = local_db.query(LocalOrganization).filter(LocalOrganization.id == org_id, LocalOrganization.deleted == 0).first()
@@ -1789,6 +2176,29 @@ def get_org_usage_trend(
     start_datetime = datetime.combine(start_date_obj, datetime.min.time())
     end_datetime = datetime.combine(end_date_obj, datetime.max.time())
     
+    device_query = local_db.query(LocalDevice.id).filter(
+        LocalDevice.deleted == 0,
+        LocalDevice.organization_id == org_id
+    )
+    
+    if purpose is not None:
+        device_query = device_query.filter(LocalDevice.purpose == purpose)
+    
+    if network:
+        device_query = device_query.filter(LocalDevice.net_module_code == network)
+    
+    device_ids = [d.id for d in device_query.all()]
+    
+    if not device_ids:
+        return {
+            "org_id": org_id,
+            "org_name": org.name,
+            "monthly": [],
+            "daily": [],
+            "hourly": [],
+            "warning": None
+        }
+    
     monthly_data = {}
     daily_data = {}
     hourly_data = {}
@@ -1796,118 +2206,51 @@ def get_org_usage_trend(
     daily_memory_data = {}
     hourly_memory_data = {}
     
-    if purpose is not None:
-        device_query = local_db.query(LocalDevice.id).filter(
-            LocalDevice.deleted == 0,
-            LocalDevice.purpose == purpose
-        )
+    for summary in local_db.query(LocalDailyDeviceSummary).filter(
+        LocalDailyDeviceSummary.device_id.in_(device_ids),
+        LocalDailyDeviceSummary.summary_date >= start_date_obj,
+        LocalDailyDeviceSummary.summary_date <= end_date_obj
+    ).order_by(LocalDailyDeviceSummary.summary_date).all():
+        month_key = summary.summary_date.strftime('%Y-%m')
+        day_key = summary.summary_date.strftime('%Y-%m-%d')
         
-        if org_id:
-            device_query = device_query.filter(LocalDevice.organization_id == org_id)
+        if time_type == "work":
+            val = float(summary.avg_gpu_usage_rate_work or 0)
+        elif time_type == "nonwork":
+            val = float(summary.avg_gpu_usage_rate_nonwork or 0)
+        else:
+            val = float(summary.avg_gpu_usage_rate or 0)
         
-        device_ids = [d.id for d in device_query.all()]
+        memory_val = float(summary.avg_memory_usage_rate or 0)
         
-        if not device_ids:
-            return {
-                "org_id": org_id,
-                "org_name": org.name,
-                "monthly": [],
-                "daily": [],
-                "hourly": [],
-                "warning": None
-            }
+        if month_key not in monthly_data:
+            monthly_data[month_key] = []
+            monthly_memory_data[month_key] = []
+        monthly_data[month_key].append(val)
+        monthly_memory_data[month_key].append(memory_val)
         
-        for summary in local_db.query(LocalDailyDeviceSummary).filter(
-            LocalDailyDeviceSummary.device_id.in_(device_ids),
-            LocalDailyDeviceSummary.summary_date >= start_date_obj,
-            LocalDailyDeviceSummary.summary_date <= end_date_obj
-        ).order_by(LocalDailyDeviceSummary.summary_date).all():
-            month_key = summary.summary_date.strftime('%Y-%m')
-            day_key = summary.summary_date.strftime('%Y-%m-%d')
-            
-            if time_type == "work":
-                val = float(summary.avg_gpu_usage_rate_work or 0)
-            elif time_type == "nonwork":
-                val = float(summary.avg_gpu_usage_rate_nonwork or 0)
-            else:
-                val = float(summary.avg_gpu_usage_rate or 0)
-            
-            memory_val = float(summary.avg_memory_usage_rate or 0)
-            
-            if month_key not in monthly_data:
-                monthly_data[month_key] = []
-                monthly_memory_data[month_key] = []
-            monthly_data[month_key].append(val)
-            monthly_memory_data[month_key].append(memory_val)
-            
-            if day_key not in daily_data:
-                daily_data[day_key] = []
-                daily_memory_data[day_key] = []
-            daily_data[day_key].append(val)
-            daily_memory_data[day_key].append(memory_val)
+        if day_key not in daily_data:
+            daily_data[day_key] = []
+            daily_memory_data[day_key] = []
+        daily_data[day_key].append(val)
+        daily_memory_data[day_key].append(memory_val)
+    
+    for hourly in local_db.query(LocalDeviceHourlyStats).filter(
+        LocalDeviceHourlyStats.device_id.in_(device_ids),
+        LocalDeviceHourlyStats.stat_date >= start_date_obj,
+        LocalDeviceHourlyStats.stat_date <= end_date_obj
+    ).order_by(LocalDeviceHourlyStats.stat_hour).all():
+        if hourly.is_work_hour == 1 and time_type == "nonwork":
+            continue
+        if hourly.is_work_hour == 0 and time_type == "work":
+            continue
         
-        for hourly in local_db.query(LocalDeviceHourlyStats).filter(
-            LocalDeviceHourlyStats.device_id.in_(device_ids),
-            LocalDeviceHourlyStats.stat_date >= start_date_obj,
-            LocalDeviceHourlyStats.stat_date <= end_date_obj
-        ).order_by(LocalDeviceHourlyStats.stat_hour).all():
-            if hourly.is_work_hour == 1 and time_type == "nonwork":
-                continue
-            if hourly.is_work_hour == 0 and time_type == "work":
-                continue
-            
-            hour_key = str(hourly.stat_hour)
-            if hour_key not in hourly_data:
-                hourly_data[hour_key] = []
-                hourly_memory_data[hour_key] = []
-            hourly_data[hour_key].append(float(hourly.avg_gpu_usage_rate or 0))
-            hourly_memory_data[hour_key].append(0)
-    else:
-        for summary in local_db.query(LocalOrgGpuUsageSummary).filter(
-            LocalOrgGpuUsageSummary.organization_id3 == org_id,
-            LocalOrgGpuUsageSummary.summary_time >= start_datetime,
-            LocalOrgGpuUsageSummary.summary_time <= end_datetime
-        ).order_by(LocalOrgGpuUsageSummary.summary_time).all():
-            month_key = summary.summary_time.strftime('%Y-%m')
-            day_key = summary.summary_time.strftime('%Y-%m-%d')
-            
-            if time_type == "work":
-                val = float(summary.avg_gpu_usage_rate_work or 0)
-            elif time_type == "nonwork":
-                val = float(summary.avg_gpu_usage_rate_nonwork or 0)
-            else:
-                val = float(summary.avg_gpu_usage_rate or 0)
-            
-            memory_val = float(summary.avg_memory_usage_rate or 0)
-            
-            if month_key not in monthly_data:
-                monthly_data[month_key] = []
-                monthly_memory_data[month_key] = []
-            monthly_data[month_key].append(val)
-            monthly_memory_data[month_key].append(memory_val)
-            
-            if day_key not in daily_data:
-                daily_data[day_key] = []
-                daily_memory_data[day_key] = []
-            daily_data[day_key].append(val)
-            daily_memory_data[day_key].append(memory_val)
-        
-        for hourly in local_db.query(LocalOrgHourlyStats).filter(
-            LocalOrgHourlyStats.organization_id3 == org_id,
-            LocalOrgHourlyStats.stat_date >= start_date_obj,
-            LocalOrgHourlyStats.stat_date <= end_date_obj
-        ).order_by(LocalOrgHourlyStats.stat_hour).all():
-            if hourly.is_work_hour == 1 and time_type == "nonwork":
-                continue
-            if hourly.is_work_hour == 0 and time_type == "work":
-                continue
-            
-            hour_key = str(hourly.stat_hour)
-            if hour_key not in hourly_data:
-                hourly_data[hour_key] = []
-                hourly_memory_data[hour_key] = []
-            hourly_data[hour_key].append(float(hourly.avg_gpu_usage_rate or 0))
-            hourly_memory_data[hour_key].append(0)
+        hour_key = str(hourly.stat_hour)
+        if hour_key not in hourly_data:
+            hourly_data[hour_key] = []
+            hourly_memory_data[hour_key] = []
+        hourly_data[hour_key].append(float(hourly.avg_gpu_usage_rate or 0))
+        hourly_memory_data[hour_key].append(0)
     
     monthly_result = [
         {

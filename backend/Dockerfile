@@ -1,25 +1,27 @@
 FROM python:3.12-slim
 
-LABEL maintainer="Computing Power Monitor"
-LABEL description="Backend service for Computing Power Monitoring Platform"
-
 WORKDIR /app
 
 RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+        gcc \
+        libpq-dev \
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip config set global.index-url https://mirrors.aliyun.com/pypi/simple \
+    && useradd --create-home --shell /bin/bash appuser
 
 COPY requirements.txt .
 
-RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt \
+    && rm -rf /root/.cache/pip
 
 COPY . .
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8001
 

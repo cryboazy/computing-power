@@ -19,22 +19,6 @@
         </div>
         <div class="header-title-group">
           <h3 class="dialog-title">{{ orgName || '组织机构详情' }}</h3>
-          <div class="header-subtitle">
-            <span class="subtitle-item">
-              <span class="subtitle-label">统计范围：</span>
-              <span class="subtitle-value">{{ orgScopeLabel }}</span>
-            </span>
-            <span class="subtitle-divider">|</span>
-            <span class="subtitle-item">
-              <span class="subtitle-label">时间区间：</span>
-              <span class="subtitle-value">{{ timeRangeLabel }}</span>
-            </span>
-            <span class="subtitle-divider">|</span>
-            <span class="subtitle-item">
-              <span class="subtitle-label">时段类型：</span>
-              <span class="subtitle-value">{{ timeTypeLabel }}</span>
-            </span>
-          </div>
         </div>
         <div class="header-decoration right">
           <span class="decoration-dot"></span>
@@ -107,6 +91,26 @@
               >近一年</el-button>
             </div>
             <div class="filter-group">
+              <span class="filter-label">运行网络：</span>
+              <el-select
+                v-model="globalNetworkFilter"
+                placeholder="全部网络"
+                size="small"
+                class="purpose-select"
+              >
+                <el-option
+                  label="全部网络"
+                  value="all"
+                />
+                <el-option
+                  v-for="network in networkList"
+                  :key="network.code"
+                  :label="network.name"
+                  :value="network.code"
+                />
+              </el-select>
+            </div>
+            <div class="filter-group">
               <span class="filter-label">用途：</span>
               <el-select
                 v-model="selectedPurpose"
@@ -145,7 +149,7 @@
             :org-id="orgId"
           />
           
-          <UsageDetailTab 
+          <OrgUsageDetailTab 
             v-if="activeTab === 'usage'"
             :org-id="orgId"
             :date-range="dateRange"
@@ -158,12 +162,15 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted } from 'vue'
+import { ref, watch, computed, onMounted, inject } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning } from '@element-plus/icons-vue'
 import { dashboardApi } from '../api'
 import DeviceDetailTab from './DeviceDetailTab.vue'
-import UsageDetailTab from './UsageDetailTab.vue'
+import OrgUsageDetailTab from './OrgUsageDetailTab.vue'
+
+const globalNetworkFilter = inject('globalNetworkFilter')
+const networkList = inject('networkList')
 
 const props = defineProps({
   visible: {
@@ -225,7 +232,7 @@ const loading = ref(false)
 const error = ref(null)
 const orgDetail = ref(null)
 const orgName = ref('')
-const quickSelect = ref('3m')
+const quickSelect = ref(null)
 
 const today = new Date()
 const formatDate = (date) => {
@@ -271,7 +278,10 @@ const purposeList = ref([])
 const fetchPurposeList = async () => {
   try {
     const data = await dashboardApi.getPurposeDict()
-    const options = (data || []).filter(item => item && item.value !== undefined && item.value !== null)
+    const options = (data || []).map(item => ({
+      value: item.dict_value,
+      label: item.dict_label
+    })).filter(item => item.value !== undefined && item.value !== null)
     purposeList.value = [{ value: '', label: '全部用途' }, ...options]
   } catch (error) {
     console.error('Failed to fetch purpose list:', error)
@@ -356,6 +366,7 @@ watch(() => props.visible, (newVal) => {
       activeTab.value = 'devices'
     }
     fetchData()
+    fetchPurposeList()
   }
 })
 

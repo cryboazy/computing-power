@@ -5,7 +5,10 @@
         <span class="panel-title">全国使用率Top5</span>
       </div>
       <div class="panel-content">
-        <div class="ranking-list">
+        <div v-if="!allRanking.length" class="no-data">
+          暂无数据
+        </div>
+        <div v-else class="ranking-list">
           <div 
             v-for="(item, index) in allRanking" 
             :key="index"
@@ -14,7 +17,7 @@
           >
             <span :class="['rank-badge', `rank-${index + 1}`]">{{ index + 1 }}</span>
             <span class="org-name">{{ item.org_name }}</span>
-            <span class="usage-value" :style="{ color: getUsageColor(item.avg_gpu_usage) }">{{ item.avg_gpu_usage || 0 }}%</span>
+            <span class="usage-value" :style="{ color: getUsageColor(item.avg_gpu_usage) }">{{ formatNumber(item.avg_gpu_usage, 2) }}%</span>
           </div>
         </div>
       </div>
@@ -25,7 +28,10 @@
         <span class="panel-title">{{ groupName }}使用率Top5</span>
       </div>
       <div class="panel-content">
-        <div class="ranking-list">
+        <div v-if="!rankings.length" class="no-data">
+          暂无数据
+        </div>
+        <div v-else class="ranking-list">
           <div 
             v-for="(item, index) in rankings" 
             :key="index"
@@ -34,7 +40,7 @@
           >
             <span :class="['rank-badge', `rank-${index + 1}`]">{{ index + 1 }}</span>
             <span class="org-name">{{ item.org_name }}</span>
-            <span class="usage-value" :style="{ color: getUsageColor(item.avg_gpu_usage) }">{{ item.avg_gpu_usage || 0 }}%</span>
+            <span class="usage-value" :style="{ color: getUsageColor(item.avg_gpu_usage) }">{{ formatNumber(item.avg_gpu_usage, 2) }}%</span>
           </div>
         </div>
       </div>
@@ -51,6 +57,8 @@ const showPanelExpand = inject('showPanelExpand')
 const showOrgDetail = inject('showOrgDetail')
 const timeType = inject('timeType')
 const activeTab = inject('globalTimeRange')
+const globalNetworkFilter = inject('globalNetworkFilter')
+const globalPurposeFilter = inject('globalPurposeFilter')
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
 const { getAllColors } = useTheme()
 const allRanking = ref([])
@@ -64,11 +72,18 @@ const getUsageColor = (usage) => {
   return colors.success
 }
 
+const formatNumber = (num, decimals = 0) => {
+  if (!num && num !== 0) return '0'
+  return Number(num).toFixed(decimals)
+}
+
 const fetchData = async () => {
   try {
+    const network = globalNetworkFilter?.value === 'all' ? null : globalNetworkFilter?.value
+    const purpose = globalPurposeFilter?.value === 'all' ? null : globalPurposeFilter?.value
     const [all, groups] = await Promise.all([
-      dashboardApi.getAllRanking(activeTab.value, timeType.value),
-      dashboardApi.getAllGroupRankings(activeTab.value, timeType.value)
+      dashboardApi.getAllRanking(activeTab.value, timeType.value, network, purpose),
+      dashboardApi.getAllGroupRankings(activeTab.value, timeType.value, network, purpose)
     ])
     
     allRanking.value = all.slice(0, 5)
@@ -94,6 +109,8 @@ const handleRankingItemClick = (item) => {
 
 watch(activeTab, fetchData)
 watch(timeType, fetchData)
+watch(() => globalNetworkFilter?.value, fetchData)
+watch(() => globalPurposeFilter?.value, fetchData)
 
 onMounted(fetchData)
 </script>
@@ -182,5 +199,14 @@ onMounted(fetchData)
       font-weight: bold;
     }
   }
+}
+
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--theme-text-muted);
+  font-size: 14px;
 }
 </style>

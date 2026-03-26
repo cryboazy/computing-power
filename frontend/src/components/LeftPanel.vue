@@ -5,7 +5,10 @@
         <span class="panel-title">资源趋势</span>
       </div>
       <div class="panel-content">
-        <v-chart :option="combinedTrendOption" autoresize />
+        <div v-if="!deviceCountData.length && !gpuCountData.length && !memoryTotalData.length && !computeTotalData.length" class="no-data">
+          暂无数据
+        </div>
+        <v-chart v-else :option="combinedTrendOption" autoresize />
       </div>
     </div>
     
@@ -14,7 +17,10 @@
         <span class="panel-title">使用率趋势</span>
       </div>
       <div class="panel-content">
-        <v-chart :option="gpuUsageOption" autoresize />
+        <div v-if="!gpuUsageData.length" class="no-data">
+          暂无数据
+        </div>
+        <v-chart v-else :option="gpuUsageOption" autoresize />
       </div>
     </div>
     
@@ -51,7 +57,10 @@
         </div>
       </div>
       <div class="panel-content">
-        <v-chart v-show="warningViewType === 'chart'" :option="warningBarOption" autoresize />
+        <div v-if="!warningData.length && warningViewType === 'chart'" class="no-data">
+          暂无数据
+        </div>
+        <v-chart v-show="warningViewType === 'chart' && warningData.length" :option="warningBarOption" autoresize />
         <div v-show="warningViewType === 'list'" class="warning-list">
           <div class="list-header">
             <span class="col-name">单位名称</span>
@@ -59,7 +68,11 @@
             <span class="col-status">状态</span>
           </div>
           <div class="list-body">
+            <div v-if="!warningListData.length" class="no-data-list">
+              暂无数据
+            </div>
             <div 
+              v-else
               v-for="(item, index) in warningListData" 
               :key="index"
               class="list-row"
@@ -106,10 +119,13 @@ const globalPageSize = inject('globalPageSize')
 const showOrgDetail = inject('showOrgDetail')
 const timeType = inject('timeType')
 const activeTab = inject('globalTimeRange')
+const globalNetworkFilter = inject('globalNetworkFilter')
+const globalPurposeFilter = inject('globalPurposeFilter')
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
 const { getAllColors, currentThemeKey } = useTheme()
 
 const deviceCountData = ref([])
+const gpuCountData = ref([])
 const memoryTotalData = ref([])
 const computeTotalData = ref([])
 const gpuUsageData = ref([])
@@ -144,15 +160,16 @@ const combinedTrendOption = computed(() => {
         let result = params[0].axisValue + '<br/>'
         params.forEach(param => {
           const unit = param.seriesName.includes('设备') ? '台' : 
+                       param.seriesName.includes('GPU卡') ? '张' : 
                        param.seriesName.includes('显存') ? 'GB' : 
-                       param.seriesName.includes('算力') ? 'PFLOPS' : ''
+                       param.seriesName.includes('算力') ? 'PF' : ''
           result += `${param.marker} ${param.seriesName}: ${param.value}${unit}<br/>`
         })
         return result
       }
     },
     legend: {
-      data: ['设备数量', '显存总量', '算力'],
+      data: ['设备数量', 'GPU卡数量', '显存总量', '算力'],
       textStyle: { color: colors.textSecondary, fontSize: 11 },
       top: 0,
       itemWidth: 15,
@@ -183,6 +200,13 @@ const combinedTrendOption = computed(() => {
       {
         type: 'value',
         position: 'right',
+        axisLine: { lineStyle: { color: colors.chart4 } },
+        axisLabel: { show: false },
+        splitLine: { show: false }
+      },
+      {
+        type: 'value',
+        position: 'right',
         offset: 40,
         axisLine: { lineStyle: { color: colors.chart2 } },
         axisLabel: { show: false },
@@ -191,6 +215,7 @@ const combinedTrendOption = computed(() => {
       {
         type: 'value',
         position: 'right',
+        offset: 80,
         axisLine: { lineStyle: { color: colors.chart3 } },
         axisLabel: { show: false },
         splitLine: { show: false }
@@ -219,12 +244,33 @@ const combinedTrendOption = computed(() => {
         data: deviceCountData.value.map(d => d.value)
       },
       {
-        name: '显存总量',
+        name: 'GPU卡数量',
         type: 'line',
         smooth: true,
         symbol: 'circle',
         symbolSize: 4,
         yAxisIndex: 1,
+        lineStyle: { color: colors.chart4, width: 2 },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: colors.chart4 + '33' },
+              { offset: 1, color: colors.chart4 + '05' }
+            ]
+          }
+        },
+        itemStyle: { color: colors.chart4 },
+        data: gpuCountData.value.map(d => d.value)
+      },
+      {
+        name: '显存总量',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 4,
+        yAxisIndex: 2,
         lineStyle: { color: colors.chart2, width: 2 },
         areaStyle: {
           color: {
@@ -245,7 +291,7 @@ const combinedTrendOption = computed(() => {
         smooth: true,
         symbol: 'circle',
         symbolSize: 4,
-        yAxisIndex: 2,
+        yAxisIndex: 3,
         lineStyle: { color: colors.chart3, width: 2 },
         areaStyle: {
           color: {
@@ -446,15 +492,19 @@ const warningListData = computed(() => {
 
 const fetchData = async () => {
   try {
-    const [deviceCount, memoryTotal, computeTotal, gpuUsage, warning] = await Promise.all([
-      dashboardApi.getDeviceCountTrend(activeTab.value, timeType.value),
-      dashboardApi.getMemoryTotalTrend(activeTab.value, timeType.value),
-      dashboardApi.getComputeTotalTrend(activeTab.value, timeType.value),
-      dashboardApi.getGpuUsageTrend(activeTab.value, timeType.value),
-      dashboardApi.getUsageWarningBar(activeTab.value, timeType.value)
+    const network = globalNetworkFilter?.value === 'all' ? null : globalNetworkFilter?.value
+    const purpose = globalPurposeFilter?.value === 'all' ? null : globalPurposeFilter?.value
+    const [deviceCount, gpuCount, memoryTotal, computeTotal, gpuUsage, warning] = await Promise.all([
+      dashboardApi.getDeviceCountTrend(activeTab.value, timeType.value, network),
+      dashboardApi.getGpuCountTrend(activeTab.value, timeType.value, network),
+      dashboardApi.getMemoryTotalTrend(activeTab.value, timeType.value, network),
+      dashboardApi.getComputeTotalTrend(activeTab.value, timeType.value, network),
+      dashboardApi.getGpuUsageTrend(activeTab.value, timeType.value, network, purpose),
+      dashboardApi.getUsageWarningBar(activeTab.value, timeType.value, network, purpose)
     ])
     
     deviceCountData.value = deviceCount
+    gpuCountData.value = gpuCount
     memoryTotalData.value = memoryTotal
     computeTotalData.value = computeTotal
     gpuUsageData.value = gpuUsage
@@ -472,6 +522,8 @@ let cleanup = null
 
 watch(activeTab, fetchData)
 watch(timeType, fetchData)
+watch(() => globalNetworkFilter?.value, fetchData)
+watch(() => globalPurposeFilter?.value, fetchData)
 
 const startWarningTimer = () => {
   if (warningTimer) clearInterval(warningTimer)
@@ -722,5 +774,23 @@ onUnmounted(() => {
       text-align: center;
     }
   }
+}
+
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--theme-text-muted);
+  font-size: 14px;
+}
+
+.no-data-list {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--theme-text-muted);
+  font-size: 13px;
 }
 </style>

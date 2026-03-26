@@ -74,6 +74,28 @@
               </el-input>
             </div>
             <div class="filter-item">
+              <label>运行网络</label>
+              <el-select v-model="carouselNetwork" placeholder="全部网络" clearable size="small" @change="handleCarouselFilter">
+                <el-option
+                  v-for="network in networkList"
+                  :key="network.code"
+                  :label="network.name"
+                  :value="network.code"
+                />
+              </el-select>
+            </div>
+            <div class="filter-item">
+              <label>设备用途</label>
+              <el-select v-model="carouselPurpose" placeholder="全部用途" clearable size="small" @change="handleCarouselFilter">
+                <el-option
+                  v-for="purpose in purposeList"
+                  :key="purpose.dict_value"
+                  :label="purpose.dict_label"
+                  :value="String(purpose.dict_value)"
+                />
+              </el-select>
+            </div>
+            <div class="filter-item">
               <label>时间类型</label>
               <el-radio-group v-model="carouselTimeType" size="small" @change="handleCarouselFilter">
                 <el-radio-button value="work">工作时间</el-radio-button>
@@ -221,7 +243,7 @@
             </el-table-column>
             <el-table-column prop="avg_gpu_usage" label="GPU使用率" width="130" sortable>
               <template #default="{ row }">
-                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ row.avg_gpu_usage || 0 }}%</span>
+                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ formatNumber(row.avg_gpu_usage, 2) }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -287,7 +309,7 @@
             </el-table-column>
             <el-table-column prop="avg_gpu_usage" label="GPU使用率" width="130" sortable>
               <template #default="{ row }">
-                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ row.avg_gpu_usage || 0 }}%</span>
+                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ formatNumber(row.avg_gpu_usage, 2) }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -353,7 +375,7 @@
             </el-table-column>
             <el-table-column prop="avg_gpu_usage" label="GPU使用率" width="130" sortable>
               <template #default="{ row }">
-                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ row.avg_gpu_usage || 0 }}%</span>
+                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ formatNumber(row.avg_gpu_usage, 2) }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -429,6 +451,10 @@ const carouselTimeGrain = ref('day')
 const carouselTimeType = ref('work')
 const carouselDateRange = ref(null)
 const carouselInitialized = ref(false)
+const carouselNetwork = ref('')
+const carouselPurpose = ref('')
+const networkList = ref([])
+const purposeList = ref([])
 
 const getTimeGrainFromRange = (timeRange) => {
   const mapping = {
@@ -475,6 +501,24 @@ const initDateRange = () => {
   }
 }
 
+const loadNetworkList = async () => {
+  try {
+    const response = await dashboardApi.getNetworkList()
+    networkList.value = response || []
+  } catch (error) {
+    console.error('Failed to load network list:', error)
+  }
+}
+
+const loadPurposeList = async () => {
+  try {
+    const response = await dashboardApi.getPurposeDict()
+    purposeList.value = response || []
+  } catch (error) {
+    console.error('Failed to load purpose list:', error)
+  }
+}
+
 const drillDialogVisible = ref(false)
 const drillLoading = ref(false)
 const drillDate = ref('')
@@ -514,11 +558,11 @@ const formatMemory = (mb) => {
 }
 
 const formatCompute = (tflops) => {
-  if (!tflops || tflops === 0) return '0 TFLOPS'
+  if (!tflops || tflops === 0) return '0 TF'
   if (tflops >= 1000) {
-    return (tflops / 1000).toFixed(2) + ' PFLOPS'
+    return (tflops / 1000).toFixed(2) + ' PF'
   }
-  return tflops.toFixed(2) + ' TFLOPS'
+  return tflops.toFixed(2) + ' TF'
 }
 
 const formatCapacity = (gb) => {
@@ -535,6 +579,11 @@ const getUsageColor = (usage) => {
   if (usage >= usageThresholds.value.high) return colors.usageHigh
   if (usage >= usageThresholds.value.low) return colors.usageMedium
   return colors.usageLow
+}
+
+const formatNumber = (num, decimals = 0) => {
+  if (!num && num !== 0) return '0'
+  return Number(num).toFixed(decimals)
 }
 
 const sortData = (data, sortConfig) => {
@@ -633,7 +682,7 @@ const combinedTrendOption = computed(() => {
         params.forEach(param => {
           const unit = param.seriesName.includes('设备') ? '台' : 
                        param.seriesName.includes('显存') ? 'GB' : 
-                       param.seriesName.includes('算力') ? 'PFLOPS' : ''
+                       param.seriesName.includes('算力') ? 'PF' : ''
           result += `${param.marker} ${param.seriesName}: ${param.value}${unit}<br/>`
         })
         return result
@@ -781,7 +830,7 @@ const computeTotalOption = computed(() => ({
   ...baseOption,
   xAxis: { ...baseOption.xAxis, data: computeTotalData.value.map(d => d.date) },
   series: [{
-    name: '算力(PFLOPS)',
+    name: '算力(PF)',
     type: 'line',
     smooth: true,
     symbol: 'circle',
@@ -1368,7 +1417,7 @@ const fetchCenterPanelData = async () => {
       dashboardApi.getNetworkDistributionByOrg(),
       dashboardApi.getGpuTierByOrgDistribution(),
       dashboardApi.getPurposeDistributionByOrg(),
-      dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, timeGrain, startDate, endDate)
+      dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, timeGrain, startDate, endDate, null, null, carouselNetwork.value || null, carouselPurpose.value || null)
     ])
     
     orgTypeData.value = orgType
@@ -1388,7 +1437,7 @@ const handleCarouselFilter = async () => {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
     console.log('[Carousel Filter] timeType:', carouselTimeType.value)
-    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate, null, null, carouselNetwork.value || null, carouselPurpose.value || null)
     console.log('[Carousel Filter] Received:', carousel)
     carouselData.value = carousel
   } catch (error) {
@@ -1403,7 +1452,7 @@ const handleTimeGrainChange = async () => {
   try {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
-    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate, null, null, carouselNetwork.value || null, carouselPurpose.value || null)
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to change time grain:', error)
@@ -1417,7 +1466,7 @@ const handleDateRangeChange = async () => {
   try {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
-    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate)
+    const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate, null, null, carouselNetwork.value || null, carouselPurpose.value || null)
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to change date range:', error)
@@ -1562,6 +1611,8 @@ watch(carouselTimeType, (newVal, oldVal) => {
 })
 
 onMounted(() => {
+  loadNetworkList()
+  loadPurposeList()
 })
 </script>
 
@@ -1673,7 +1724,7 @@ onMounted(() => {
         }
         
         :deep(.el-select) {
-          width: 150px;
+          width: 100px;
           
           .el-input__wrapper {
             background: var(--theme-input-bg);
