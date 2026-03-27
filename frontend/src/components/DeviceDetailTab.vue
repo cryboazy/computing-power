@@ -9,9 +9,29 @@
             <line x1="12" y1="17" x2="12" y2="21"></line>
           </svg>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">设备总数<span class="stat-unit-text">（台）</span></div>
-          <div class="stat-value">{{ orgDetail?.total_devices || 0 }}</div>
+        <div class="stat-info">
+          <div class="stat-label">设备总数</div>
+          <div class="stat-value">{{ orgDetail?.total_devices || 0 }}<span class="stat-unit-suffix">台</span></div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+            <rect x="9" y="9" width="6" height="6"/>
+            <line x1="9" y1="1" x2="9" y2="4"/>
+            <line x1="15" y1="1" x2="15" y2="4"/>
+            <line x1="9" y1="20" x2="9" y2="23"/>
+            <line x1="15" y1="20" x2="15" y2="23"/>
+            <line x1="20" y1="9" x2="23" y2="9"/>
+            <line x1="20" y1="14" x2="23" y2="14"/>
+            <line x1="1" y1="9" x2="4" y2="9"/>
+            <line x1="1" y1="14" x2="4" y2="14"/>
+          </svg>
+        </div>
+        <div class="stat-info">
+          <div class="stat-label">GPU卡总数</div>
+          <div class="stat-value">{{ orgDetail?.total_gpus || 0 }}<span class="stat-unit-suffix">块</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -22,9 +42,9 @@
             <path d="M2 12l10 5 10-5"></path>
           </svg>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">显存总量<span class="stat-unit-text">（GB）</span></div>
-          <div class="stat-value">{{ formatNumber(orgDetail?.total_memory_gb || 0) }}</div>
+        <div class="stat-info">
+          <div class="stat-label">显存总量</div>
+          <div class="stat-value">{{ formatNumber(orgDetail?.total_memory_gb || 0) }}<span class="stat-unit-suffix">GB</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -33,9 +53,9 @@
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">总算力<span class="stat-unit-text">（PF）</span></div>
-          <div class="stat-value">{{ formatNumber((orgDetail?.total_compute_tflops || 0) / 1000, 2) }}</div>
+        <div class="stat-info">
+          <div class="stat-label">总算力</div>
+          <div class="stat-value">{{ formatNumber((orgDetail?.total_compute_tflops || 0) / 1000, 2) }}<span class="stat-unit-suffix">PF</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -44,9 +64,9 @@
             <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
           </svg>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">平均使用率<span class="stat-unit-text">（%）</span></div>
-          <div class="stat-value">{{ formatNumber(orgDetail?.avg_usage_rate || 0, 2) }}</div>
+        <div class="stat-info">
+          <div class="stat-label">平均使用率</div>
+          <div class="stat-value">{{ formatNumber(orgDetail?.avg_usage_rate || 0, 2) }}<span class="stat-unit-suffix">%</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -56,9 +76,9 @@
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">显存使用率<span class="stat-unit-text">（%）</span></div>
-          <div class="stat-value" :title="`显存已用量: ${formatNumber(orgDetail?.memory_used_gb || 0)} GB`">{{ formatNumber(orgDetail?.memory_usage_rate || 0, 2) }}</div>
+        <div class="stat-info">
+          <div class="stat-label">显存使用率</div>
+          <div class="stat-value" :title="`显存已用量: ${formatNumber(orgDetail?.memory_used_gb || 0)} GB`">{{ formatNumber(orgDetail?.memory_usage_rate || 0, 2) }}<span class="stat-unit-suffix">%</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -69,9 +89,9 @@
             <path d="M6 20v-6"></path>
           </svg>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">显存利用率<span class="stat-unit-text">（%）</span></div>
-          <div class="stat-value">{{ formatNumber(orgDetail?.avg_memory_utilization || 0, 2) }}</div>
+        <div class="stat-info">
+          <div class="stat-label">显存利用率</div>
+          <div class="stat-value">{{ formatNumber(orgDetail?.avg_memory_utilization || 0, 2) }}<span class="stat-unit-suffix">%</span></div>
         </div>
       </div>
     </div>
@@ -740,7 +760,7 @@ onMounted(() => {
       }
     }
 
-    .stat-content {
+    .stat-info {
       flex: 1;
       min-width: 0;
 
@@ -760,10 +780,11 @@ onMounted(() => {
   }
 }
 
-.stat-unit-text {
-  font-size: 10px;
+.stat-unit-suffix {
+  font-size: 12px;
   font-weight: normal;
-  color: var(--theme-text-muted);
+  color: var(--theme-text-secondary);
+  margin-left: 2px;
 }
 
 .distribution-loading {

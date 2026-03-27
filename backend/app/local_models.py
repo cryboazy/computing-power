@@ -356,6 +356,27 @@ class LocalPurposeDict(LocalBase):
     )
 
 
+class LocalGpuTierDict(LocalBase):
+    __tablename__ = "cached_gpu_tier_dict"
+
+    id = Column(BigInteger, primary_key=True)
+    dict_type = Column(String(100), nullable=False)
+    dict_label = Column(String(100), nullable=False)
+    dict_value = Column(Integer, nullable=False)
+    dict_sort = Column(Integer, default=0)
+    status = Column(SmallInteger, default=1)
+    remark = Column(String(500), default="")
+    deleted = Column(SmallInteger, default=0)
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index('idx_cached_tier_type', 'dict_type'),
+        Index('idx_cached_tier_value', 'dict_value'),
+        Index('idx_cached_tier_label', 'dict_label'),
+    )
+
+
 class LocalAggregationTask(LocalBase):
     __tablename__ = "aggregation_task"
     

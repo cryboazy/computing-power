@@ -129,6 +129,12 @@ export const dashboardApi = {
     if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
     return api.get('/local/purpose', { params })
   },
+  getLocalNetwork: (network = null, purpose = null) => {
+    const params = {}
+    if (network) params.network = network
+    if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
+    return api.get('/local/network', { params })
+  },
   getLocalTrend: (timeType = 'work', network = null) => {
     const params = { time_type: timeType }
     if (network) params.network = network
@@ -232,6 +238,14 @@ export const dashboardApi = {
     if (endDate) params.end_date = endDate
     return api.get(`/device/usage-trend/${deviceId}`, { params })
   }
+}
+
+export const adminApi = {
+  getGpuTierDict: () => api.get('/admin/dict/gpu-tier'),
+  createGpuTier: (data) => api.post('/admin/dict/gpu-tier', data),
+  updateGpuTier: (id, data) => api.put(`/admin/dict/gpu-tier/${id}`, data),
+  deleteGpuTier: (id) => api.delete(`/admin/dict/gpu-tier/${id}`),
+  updateGpuTierStatus: (id, status) => api.patch(`/admin/dict/gpu-tier/${id}/status`, { status })
 }
 
 export default api

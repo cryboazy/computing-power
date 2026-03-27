@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
 from app.local_database import get_local_db, LOCAL_DB_PATH, local_engine
-from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict, LocalCacheMetadata
+from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict, LocalGpuTierDict, LocalCacheMetadata
+from app.gpu_tier_utils import GPUTierManager
 from app.aggregator import DataAggregator
 from app.database import SessionLocal, engine
 from app import task_executor
@@ -798,3 +799,187 @@ def test_database_connection():
         results["local_database"]["error"] = str(e)
     
     return results
+
+
+class GpuTierDictRequest(BaseModel):
+    dict_label: str
+    dict_value: int
+    dict_sort: int = 0
+    status: int = 1
+    remark: str = ""
+
+
+class GpuTierStatusRequest(BaseModel):
+    status: int
+
+
+@router.get("/dict/gpu-tier")
+def get_gpu_tier_list(db: Session = Depends(get_local_db)):
+    tiers = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.dict_type == "gpu_tier",
+        LocalGpuTierDict.deleted == 0
+    ).order_by(LocalGpuTierDict.dict_sort).all()
+
+    return [
+        {
+            "id": tier.id,
+            "dict_label": tier.dict_label,
+            "dict_value": tier.dict_value,
+            "dict_sort": tier.dict_sort,
+            "status": tier.status,
+            "remark": tier.remark
+        }
+        for tier in tiers
+    ]
+
+
+@router.post("/dict/gpu-tier")
+def create_gpu_tier(request: GpuTierDictRequest, db: Session = Depends(get_local_db)):
+    existing = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.dict_type == "gpu_tier",
+        LocalGpuTierDict.dict_value == request.dict_value
+    ).first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="档次值已存在")
+
+    existing_label = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.dict_type == "gpu_tier",
+        LocalGpuTierDict.dict_label == request.dict_label
+    ).first()
+
+    if existing_label:
+        raise HTTPException(status_code=400, detail="档次名称已存在")
+
+    max_id = db.query(func.max(LocalGpuTierDict.id)).scalar() or 0
+
+    tier = LocalGpuTierDict(
+        id=max_id + 1,
+        dict_type="gpu_tier",
+        dict_label=request.dict_label,
+        dict_value=request.dict_value,
+        dict_sort=request.dict_sort,
+        status=request.status,
+        remark=request.remark,
+        deleted=0
+    )
+
+    db.add(tier)
+    db.commit()
+    db.refresh(tier)
+
+    return {"success": True, "message": "GPU档次添加成功", "data": {
+        "id": tier.id,
+        "dict_label": tier.dict_label,
+        "dict_value": tier.dict_value,
+        "dict_sort": tier.dict_sort,
+        "status": tier.status,
+        "remark": tier.remark
+    }}
+
+
+@router.get("/dict/gpu-tier/{tier_id}")
+def get_gpu_tier(tier_id: int, db: Session = Depends(get_local_db)):
+    tier = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.id == tier_id,
+        LocalGpuTierDict.dict_type == "gpu_tier"
+    ).first()
+
+    if not tier:
+        raise HTTPException(status_code=404, detail="GPU档次不存在")
+
+    return {
+        "id": tier.id,
+        "dict_label": tier.dict_label,
+        "dict_value": tier.dict_value,
+        "dict_sort": tier.dict_sort,
+        "status": tier.status,
+        "remark": tier.remark
+    }
+
+
+@router.put("/dict/gpu-tier/{tier_id}")
+def update_gpu_tier(tier_id: int, request: GpuTierDictRequest, db: Session = Depends(get_local_db)):
+    tier = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.id == tier_id,
+        LocalGpuTierDict.dict_type == "gpu_tier"
+    ).first()
+
+    if not tier:
+        raise HTTPException(status_code=404, detail="GPU档次不存在")
+
+    existing = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.dict_type == "gpu_tier",
+        LocalGpuTierDict.dict_value == request.dict_value,
+        LocalGpuTierDict.id != tier_id
+    ).first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="档次值已存在")
+
+    existing_label = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.dict_type == "gpu_tier",
+        LocalGpuTierDict.dict_label == request.dict_label,
+        LocalGpuTierDict.id != tier_id
+    ).first()
+
+    if existing_label:
+        raise HTTPException(status_code=400, detail="档次名称已存在")
+
+    tier.dict_label = request.dict_label
+    tier.dict_value = request.dict_value
+    tier.dict_sort = request.dict_sort
+    tier.status = request.status
+    tier.remark = request.remark
+    tier.update_time = datetime.now()
+
+    db.commit()
+    db.refresh(tier)
+
+    return {"success": True, "message": "GPU档次更新成功", "data": {
+        "id": tier.id,
+        "dict_label": tier.dict_label,
+        "dict_value": tier.dict_value,
+        "dict_sort": tier.dict_sort,
+        "status": tier.status,
+        "remark": tier.remark
+    }}
+
+
+@router.patch("/dict/gpu-tier/{tier_id}/status")
+def update_gpu_tier_status(tier_id: int, request: GpuTierStatusRequest, db: Session = Depends(get_local_db)):
+    tier = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.id == tier_id,
+        LocalGpuTierDict.dict_type == "gpu_tier"
+    ).first()
+
+    if not tier:
+        raise HTTPException(status_code=404, detail="GPU档次不存在")
+
+    if request.status not in [0, 1]:
+        raise HTTPException(status_code=400, detail="状态值必须为0或1")
+
+    tier.status = request.status
+    tier.update_time = datetime.now()
+
+    db.commit()
+
+    return {"success": True, "message": "状态更新成功"}
+
+
+@router.delete("/dict/gpu-tier/{tier_id}")
+def delete_gpu_tier(tier_id: int, db: Session = Depends(get_local_db)):
+    tier = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.id == tier_id,
+        LocalGpuTierDict.dict_type == "gpu_tier"
+    ).first()
+
+    if not tier:
+        raise HTTPException(status_code=404, detail="GPU档次不存在")
+
+    tier.deleted = 1
+    tier.update_time = datetime.now()
+
+    db.commit()
+
+    return {"success": True, "message": "GPU档次删除成功"}

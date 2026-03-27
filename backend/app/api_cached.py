@@ -16,6 +16,7 @@ from app.local_models import (
     LocalCacheMetadata, LocalPurposeDict
 )
 from app.cache_sync import PURPOSE_DICT_TYPE, CacheSyncService, get_purpose_map
+from app.gpu_tier_utils import GPUTierManager
 from app.config import settings
 from app.org_constants import ORG_CODE_CHINA
 
@@ -111,6 +112,7 @@ class TimeRangeParams:
 
 class OverviewStats(BaseModel):
     total_devices: int
+    total_gpus: int
     total_memory_gb: float
     total_compute_tflops: float
     avg_gpu_usage: float
@@ -177,6 +179,7 @@ def get_overview_stats(
     if not device_ids:
         return OverviewStats(
             total_devices=0,
+            total_gpus=0,
             total_memory_gb=0,
             total_compute_tflops=0,
             avg_gpu_usage=0,
@@ -210,6 +213,7 @@ def get_overview_stats(
     
     return OverviewStats(
         total_devices=total_devices,
+        total_gpus=total_gpus,
         total_memory_gb=round(total_memory_gb, 2),
         total_compute_tflops=round(total_compute_tflops, 2),
         avg_gpu_usage=avg_gpu_usage,
@@ -721,8 +725,6 @@ def get_gpu_tier_distribution(
 ):
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
 
-    tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
-
     device_query = local_db.query(LocalDevice).filter(LocalDevice.deleted == 0)
     if network:
         device_query = device_query.filter(LocalDevice.net_module_code == network)
@@ -730,28 +732,10 @@ def get_gpu_tier_distribution(
         device_query = device_query.filter(LocalDevice.purpose == purpose)
     devices = device_query.all()
 
-    for device in devices:
-        gpu_model = device.gpu_model or ""
-        gpu_info = gpu_infos.get(gpu_model)
-        gpu_count = device.gpu_count or 1
-        if gpu_info:
-            if gpu_info.card_type == 1:
-                tier_counts["high"] += gpu_count
-            elif gpu_info.card_type == 2:
-                tier_counts["medium"] += gpu_count
-            elif gpu_info.card_type == 3:
-                tier_counts["low"] += gpu_count
-            else:
-                tier_counts["unknown"] += gpu_count
-        else:
-            tier_counts["unknown"] += gpu_count
+    tier_manager = GPUTierManager(local_db)
+    tier_counts = tier_manager.calculate_tier_counts(gpu_infos, devices)
 
-    return [
-        {"name": "高端卡", "value": tier_counts["high"]},
-        {"name": "中端卡", "value": tier_counts["medium"]},
-        {"name": "低端卡", "value": tier_counts["low"]},
-        {"name": "未知", "value": tier_counts["unknown"]}
-    ]
+    return tier_manager.format_tier_result(tier_counts)
 
 
 @router.get("/distribution/gpu-tier-by-org")
@@ -765,6 +749,8 @@ def get_gpu_tier_by_org_distribution(
     orgs = local_db.query(LocalOrganization).filter(
         LocalOrganization.deleted == 0
     ).all()
+
+    tier_manager = GPUTierManager(local_db)
 
     result = []
     for org in orgs:
@@ -781,32 +767,9 @@ def get_gpu_tier_by_org_distribution(
         if not devices:
             continue
 
-        tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
-
-        for device in devices:
-            gpu_model = device.gpu_model or ""
-            gpu_info = gpu_infos.get(gpu_model)
-            gpu_count = device.gpu_count or 1
-            if gpu_info:
-                if gpu_info.card_type == 1:
-                    tier_counts["high"] += gpu_count
-                elif gpu_info.card_type == 2:
-                    tier_counts["medium"] += gpu_count
-                elif gpu_info.card_type == 3:
-                    tier_counts["low"] += gpu_count
-                else:
-                    tier_counts["unknown"] += gpu_count
-            else:
-                tier_counts["unknown"] += gpu_count
-
-        result.append({
-            "org_name": org.name,
-            "high": tier_counts["high"],
-            "medium": tier_counts["medium"],
-            "low": tier_counts["low"],
-            "unknown": tier_counts["unknown"],
-            "total": sum(tier_counts.values())
-        })
+        tier_counts = tier_manager.calculate_tier_counts(gpu_infos, devices)
+        org_result = tier_manager.format_tier_by_org_result(tier_counts, org.name)
+        result.append(org_result)
 
     return sorted(result, key=lambda x: x["total"], reverse=True)
 
@@ -1100,6 +1063,7 @@ def get_local_stats(
 
     total_memory_gb = 0
     total_compute_tflops = 0
+    total_gpus = 0
 
     for device in devices:
         gpu_count = device.gpu_count or 0
@@ -1108,12 +1072,14 @@ def get_local_stats(
         if gpu_info:
             total_memory_gb += float(gpu_info.memory_total_gb or 0) * gpu_count
             total_compute_tflops += float(gpu_info.tflops_fp16 or 0) * gpu_count
+        total_gpus += gpu_count
 
     device_org_ids = list(set([d.organization_id for d in devices if d.organization_id]))
     
     if not device_org_ids:
         return {
             "total_devices": 0,
+            "total_gpus": 0,
             "total_memory_gb": 0,
             "total_compute_tflops": 0,
             "avg_gpu_usage": 0,
@@ -1152,6 +1118,7 @@ def get_local_stats(
 
     return {
         "total_devices": total_devices,
+        "total_gpus": total_gpus,
         "total_memory_gb": round(total_memory_gb, 2),
         "total_compute_tflops": round(total_compute_tflops, 2),
         "avg_gpu_usage": avg_gpu_usage,
@@ -1159,7 +1126,6 @@ def get_local_stats(
         "memory_usage_rate": memory_usage_rate,
         "avg_memory_utilization": avg_memory_utilization
     }
-
 
 @router.get("/local/gpu-tier")
 def get_local_gpu_tier(
@@ -1181,30 +1147,10 @@ def get_local_gpu_tier(
         device_query = device_query.filter(LocalDevice.purpose == purpose)
     devices = device_query.all()
 
-    tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
+    tier_manager = GPUTierManager(local_db)
+    tier_counts = tier_manager.calculate_tier_counts(gpu_infos, devices)
 
-    for device in devices:
-        gpu_model = device.gpu_model or ""
-        gpu_count = device.gpu_count or 0
-        gpu_info = gpu_infos.get(gpu_model)
-        if gpu_info:
-            if gpu_info.card_type == 1:
-                tier_counts["high"] += gpu_count
-            elif gpu_info.card_type == 2:
-                tier_counts["medium"] += gpu_count
-            elif gpu_info.card_type == 3:
-                tier_counts["low"] += gpu_count
-            else:
-                tier_counts["unknown"] += gpu_count
-        else:
-            tier_counts["unknown"] += gpu_count
-
-    return [
-        {"name": "高端卡", "value": tier_counts["high"]},
-        {"name": "中端卡", "value": tier_counts["medium"]},
-        {"name": "低端卡", "value": tier_counts["low"]},
-        {"name": "未知", "value": tier_counts["unknown"]}
-    ]
+    return tier_manager.format_tier_result(tier_counts)
 
 
 @router.get("/local/purpose")
@@ -1238,6 +1184,44 @@ def get_local_purpose(
         {"name": purpose_map.get(r.purpose, "未知"), "value": r.count or 0}
         for r in result
     ]
+
+
+@router.get("/local/network")
+def get_local_network(
+    network: str = Query(None, description="网络分类代码"),
+    purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
+    local_db: Session = Depends(get_local_db)
+):
+    local_org_ids = get_org_ids_by_type_cached(local_db, 'local')
+
+    networks = local_db.query(LocalNetwork).filter(LocalNetwork.deleted == 0).all()
+    network_map = {n.code: n.name for n in networks}
+
+    query = local_db.query(
+        LocalDevice.net_module_code,
+        func.sum(LocalDevice.gpu_count).label('count')
+    ).filter(
+        LocalDevice.organization_id.in_(local_org_ids),
+        LocalDevice.deleted == 0
+    )
+
+    if network:
+        query = query.filter(LocalDevice.net_module_code == network)
+    if purpose is not None:
+        query = query.filter(LocalDevice.purpose == purpose)
+
+    result = query.group_by(
+        LocalDevice.net_module_code
+    ).all()
+
+    distribution = {}
+    for r in result:
+        net_name = network_map.get(r.net_module_code, r.net_module_code or "未知")
+        if net_name not in distribution:
+            distribution[net_name] = 0
+        distribution[net_name] += r.count
+
+    return [{"name": k, "value": v} for k, v in distribution.items()]
 
 
 @router.get("/local/trend")
@@ -1296,6 +1280,7 @@ def get_central_stats(
 
     total_memory_gb = 0
     total_compute_tflops = 0
+    total_gpus = 0
 
     for device in devices:
         gpu_count = device.gpu_count or 0
@@ -1304,12 +1289,14 @@ def get_central_stats(
         if gpu_info:
             total_memory_gb += float(gpu_info.memory_total_gb or 0) * gpu_count
             total_compute_tflops += float(gpu_info.tflops_fp16 or 0) * gpu_count
+        total_gpus += gpu_count
 
     device_org_ids = list(set([d.organization_id for d in devices if d.organization_id]))
     
     if not device_org_ids:
         return {
             "total_devices": 0,
+            "total_gpus": 0,
             "total_memory_gb": 0,
             "total_compute_tflops": 0,
             "avg_gpu_usage": 0,
@@ -1348,6 +1335,7 @@ def get_central_stats(
 
     return {
         "total_devices": total_devices,
+        "total_gpus": total_gpus,
         "total_memory_gb": round(total_memory_gb, 2),
         "total_compute_tflops": round(total_compute_tflops, 2),
         "avg_gpu_usage": avg_gpu_usage,
@@ -1377,30 +1365,10 @@ def get_central_gpu_tier(
         device_query = device_query.filter(LocalDevice.purpose == purpose)
     devices = device_query.all()
 
-    tier_counts = {"high": 0, "medium": 0, "low": 0, "unknown": 0}
+    tier_manager = GPUTierManager(local_db)
+    tier_counts = tier_manager.calculate_tier_counts(gpu_infos, devices)
 
-    for device in devices:
-        gpu_model = device.gpu_model or ""
-        gpu_count = device.gpu_count or 1
-        gpu_info = gpu_infos.get(gpu_model)
-        if gpu_info:
-            if gpu_info.card_type == 1:
-                tier_counts["high"] += gpu_count
-            elif gpu_info.card_type == 2:
-                tier_counts["medium"] += gpu_count
-            elif gpu_info.card_type == 3:
-                tier_counts["low"] += gpu_count
-            else:
-                tier_counts["unknown"] += gpu_count
-        else:
-            tier_counts["unknown"] += gpu_count
-
-    return [
-        {"name": "高端卡", "value": tier_counts["high"]},
-        {"name": "中端卡", "value": tier_counts["medium"]},
-        {"name": "低端卡", "value": tier_counts["low"]},
-        {"name": "未知", "value": tier_counts["unknown"]}
-    ]
+    return tier_manager.format_tier_result(tier_counts)
 
 
 @router.get("/central/purpose")

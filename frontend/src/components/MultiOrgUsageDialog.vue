@@ -394,6 +394,8 @@ import { LineChart, BarChart, PieChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { dashboardApi } from '../api'
 import { useTheme } from '../composables/useTheme'
+import { getTierNames, getTierKeys, TIER_COLORS } from '../utils/gpuTierUtils'
+import { loadTierList, getTierConfigForChart } from '../store/gpuTierStore'
 
 use([
   CanvasRenderer,
@@ -1051,9 +1053,10 @@ const networkOption = computed(() => {
 const gpuTierOption = computed(() => {
   const orgNames = gpuTierByOrgData.value.map(d => d.org_name)
   
-  const colors = ['#f56c6c', '#e6a23c', '#67c23a', '#909399']
-  const tierNames = ['高端卡', '中端卡', '低端卡', '未知']
-  const tierKeys = ['high', 'medium', 'low', 'unknown']
+  const tierConfig = getTierConfigForChart()
+  const colors = Object.values(TIER_COLORS)
+  const tierNames = tierConfig.names
+  const tierKeys = tierConfig.keys
   
   const series = tierNames.map((name, index) => ({
     name: name,
@@ -1613,6 +1616,7 @@ watch(carouselTimeType, (newVal, oldVal) => {
 onMounted(() => {
   loadNetworkList()
   loadPurposeList()
+  loadTierList()
 })
 </script>
 

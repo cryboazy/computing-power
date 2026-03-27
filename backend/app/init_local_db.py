@@ -7,7 +7,7 @@ from app.local_models import (
     LocalDeviceHourlyStats, LocalOrgGpuUsageSummary, LocalStatisticsData,
     LocalOrgHourlyStats, LocalOrganization, LocalDevice, LocalGpuCardInfo,
     LocalNetwork, LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-    LocalAggregationTask
+    LocalGpuTierDict, LocalAggregationTask
 )
 
 
@@ -67,6 +67,35 @@ def init_local_purpose_dict(db):
     print("本地设备用途字典初始化完成")
 
 
+def init_local_gpu_tier_dict(db):
+    tier_dicts = [
+        {"id": 1, "dict_label": "高端卡", "dict_value": 1, "dict_sort": 1},
+        {"id": 2, "dict_label": "中端卡", "dict_value": 2, "dict_sort": 2},
+        {"id": 3, "dict_label": "低端卡", "dict_value": 3, "dict_sort": 3}
+    ]
+
+    for d in tier_dicts:
+        existing = db.query(LocalGpuTierDict).filter(
+            LocalGpuTierDict.dict_type == 'gpu_tier',
+            LocalGpuTierDict.dict_value == d["dict_value"]
+        ).first()
+        if not existing:
+            tier_dict = LocalGpuTierDict(
+                id=d["id"],
+                dict_type='gpu_tier',
+                dict_label=d["dict_label"],
+                dict_value=d["dict_value"],
+                dict_sort=d["dict_sort"],
+                status=1,
+                remark=f'GPU档次-{d["dict_label"]}',
+                deleted=0
+            )
+            db.add(tier_dict)
+
+    db.commit()
+    print("本地GPU档次字典初始化完成")
+
+
 def get_table_stats(db):
     from sqlalchemy import inspect
     inspector = inspect(db.bind)
@@ -82,6 +111,8 @@ def get_table_stats(db):
         ("org_hourly_stats", "组织小时统计"),
         ("statistics_data", "统计数据"),
         ("cache_metadata", "缓存元数据"),
+        ("cached_purpose_dict", "用途字典"),
+        ("cached_gpu_tier_dict", "GPU档次字典"),
         ("aggregation_task", "聚合任务")
     ]
     
@@ -111,7 +142,8 @@ def init_local_database(upgrade=False):
     try:
         init_local_system_config(db)
         init_local_purpose_dict(db)
-        
+        init_local_gpu_tier_dict(db)
+
         print("\n本地数据库初始化完成！")
         get_table_stats(db)
     finally:

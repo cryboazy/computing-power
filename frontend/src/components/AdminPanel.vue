@@ -173,6 +173,47 @@
         </div>
       </el-tab-pane>
 
+      <el-tab-pane label="GPU档次管理" name="gpu-tier">
+        <div class="panel-section">
+          <div class="section-content">
+            <div class="tier-header">
+              <el-button type="primary" @click="openAddTierDialog">
+                添加档次
+              </el-button>
+              <el-button @click="batchDeleteTier" :disabled="selectedTiers.length === 0">
+                批量删除
+              </el-button>
+            </div>
+            <el-table :data="tierList" style="width: 100%" border @selection-change="handleTierSelection">
+              <el-table-column type="selection" width="55" />
+              <el-table-column prop="dict_value" label="档次值" width="100">
+                <template #default="scope">
+                  <el-tag type="info">{{ scope.row.dict_value }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="dict_label" label="档次名称" />
+              <el-table-column prop="dict_sort" label="排序" width="100" />
+              <el-table-column prop="status" label="状态" width="100">
+                <template #default="scope">
+                  <el-switch v-model="scope.row.status" @change="updateTierStatus(scope.row)" :active-value="1"
+                    :inactive-value="0" />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="200" fixed="right">
+                <template #default="scope">
+                  <el-button size="small" @click="openEditTierDialog(scope.row)">
+                    编辑
+                  </el-button>
+                  <el-button size="small" type="danger" @click="deleteTier(scope.row.id)">
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane label="密码管理" name="password">
         <div class="panel-section">
           <div class="section-content">
@@ -405,6 +446,54 @@
         </span>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="tierDialogVisible" width="500px" :show-close="false">
+      <template #header>
+        <div class="dialog-header">
+          <div class="header-decoration">
+            <span class="decoration-line"></span>
+            <span class="decoration-dot"></span>
+          </div>
+          <h3 class="dialog-title">{{ tierDialogTitle }}</h3>
+          <div class="header-decoration right">
+            <span class="decoration-dot"></span>
+            <span class="decoration-line"></span>
+          </div>
+          <button class="close-btn" @click="tierDialogVisible = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </template>
+      <el-form :model="tierForm" label-width="80px">
+        <el-form-item label="档次值">
+          <el-input-number v-model="tierForm.dict_value" :min="1" :max="10" />
+          <span class="form-tip">对应 GPU 卡的 card_type 值</span>
+        </el-form-item>
+        <el-form-item label="档次名称">
+          <el-input v-model="tierForm.dict_label" placeholder="如：高端卡、中端卡" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="tierForm.dict_sort" :min="0" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="tierForm.status" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="tierForm.remark" type="textarea" placeholder="请输入备注信息" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="tierDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveTier" :loading="tierLoading">
+            保存
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -478,6 +567,21 @@ const purposeForm = ref({
   remark: ''
 })
 const purposeLoading = ref(false)
+
+// GPU 档次管理相关状态
+const tierList = ref([])
+const tierDialogVisible = ref(false)
+const tierDialogTitle = ref('添加档次')
+const tierForm = ref({
+  id: null,
+  dict_value: 1,
+  dict_label: '',
+  dict_sort: 0,
+  status: 1,
+  remark: ''
+})
+const tierLoading = ref(false)
+const selectedTiers = ref([])
 
 const dbStatus = ref({
   main_database: null,
@@ -855,6 +959,126 @@ const deletePurpose = async (id) => {
   }
 }
 
+// GPU 档次管理函数
+const loadTierList = async () => {
+  try {
+    const response = await axios.get('/api/admin/dict/gpu-tier')
+    tierList.value = response.data || []
+  } catch (error) {
+    console.error('加载GPU档次列表失败:', error)
+  }
+}
+
+const openAddTierDialog = () => {
+  tierDialogTitle.value = '添加档次'
+  tierForm.value = {
+    id: null,
+    dict_value: 1,
+    dict_label: '',
+    dict_sort: 0,
+    status: 1,
+    remark: ''
+  }
+  tierDialogVisible.value = true
+}
+
+const openEditTierDialog = (row) => {
+  tierDialogTitle.value = '编辑档次'
+  tierForm.value = {
+    id: row.id,
+    dict_value: row.dict_value,
+    dict_label: row.dict_label,
+    dict_sort: row.dict_sort,
+    status: row.status,
+    remark: row.remark || ''
+  }
+  tierDialogVisible.value = true
+}
+
+const saveTier = async () => {
+  if (!tierForm.value.dict_label) {
+    ElMessage.warning('请输入档次名称')
+    return
+  }
+
+  tierLoading.value = true
+  try {
+    if (tierForm.value.id) {
+      await axios.put(`/api/admin/dict/gpu-tier/${tierForm.value.id}`, tierForm.value)
+    } else {
+      await axios.post('/api/admin/dict/gpu-tier', tierForm.value)
+    }
+    ElMessage.success('保存成功')
+    tierDialogVisible.value = false
+    loadTierList()
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || '保存失败')
+  } finally {
+    tierLoading.value = false
+  }
+}
+
+const updateTierStatus = async (row) => {
+  try {
+    await axios.patch(`/api/admin/dict/gpu-tier/${row.id}/status`, {
+      status: row.status
+    })
+    ElMessage.success('状态更新成功')
+  } catch (error) {
+    ElMessage.error('状态更新失败')
+    loadTierList()
+  }
+}
+
+const deleteTier = async (id) => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除这个档次吗？',
+      '确认操作',
+      { type: 'warning' }
+    )
+
+    await axios.delete(`/api/admin/dict/gpu-tier/${id}`)
+    ElMessage.success('删除成功')
+    loadTierList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const handleTierSelection = (selection) => {
+  selectedTiers.value = selection
+}
+
+const batchDeleteTier = async () => {
+  if (selectedTiers.value.length === 0) {
+    ElMessage.warning('请选择要删除的档次')
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedTiers.value.length} 个档次吗？`,
+      '确认操作',
+      { type: 'warning' }
+    )
+
+    for (const tier of selectedTiers.value) {
+      await axios.delete(`/api/admin/dict/gpu-tier/${tier.id}`)
+    }
+
+    ElMessage.success('批量删除成功')
+    selectedTiers.value = []
+    loadTierList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败')
+    }
+  }
+}
+
 const refreshDatabaseStatus = async () => {
   dbStatusLoading.value = true
   try {
@@ -903,6 +1127,7 @@ onMounted(() => {
   loadConfig()
   loadAggregationStatus()
   loadPurposeList()
+  loadTierList()
   loadRecentTasks()
   checkRunningTask()
   refreshDatabaseStatus()

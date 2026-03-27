@@ -92,6 +92,7 @@ body {
   padding: 8px 12px;
   border-bottom: 1px solid var(--theme-border-light);
   background: linear-gradient(90deg, var(--theme-hover-bg) 0%, transparent 100%);
+  border-radius: 8px 8px 0 0;
   
   &.clickable {
     cursor: pointer;

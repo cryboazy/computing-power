@@ -43,20 +43,20 @@ def upgrade_local_db_schema():
         LocalDeviceHourlyStats, LocalOrgGpuUsageSummary, LocalStatisticsData,
         LocalOrgHourlyStats, LocalOrganization, LocalDevice, LocalGpuCardInfo,
         LocalNetwork, LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-        LocalAggregationTask
+        LocalGpuTierDict, LocalAggregationTask
     )
-    
+
     db = LocalSessionLocal()
     try:
         inspector = inspect(db.bind)
         existing_tables = inspector.get_table_names()
-        
+
         all_models = [
             LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary,
             LocalDeviceHourlyStats, LocalOrgGpuUsageSummary, LocalStatisticsData,
             LocalOrgHourlyStats, LocalOrganization, LocalDevice, LocalGpuCardInfo,
             LocalNetwork, LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-            LocalAggregationTask
+            LocalGpuTierDict, LocalAggregationTask
         ]
         
         changes_made = False
@@ -115,7 +115,7 @@ def init_local_db(upgrade=False):
         LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats,
         LocalOrganization, LocalDevice, LocalGpuCardInfo, LocalNetwork,
         LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-        LocalAggregationTask
+        LocalGpuTierDict, LocalAggregationTask
     )
     LocalBase.metadata.create_all(bind=local_engine)
     print("本地数据库表创建完成")

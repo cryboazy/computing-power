@@ -8,6 +8,12 @@
         </div>
       </div>
       <div class="stat-card">
+        <div class="stat-label">GPU卡总数</div>
+        <div class="stat-value">
+          {{ overviewStats.total_gpus }}<span class="stat-unit-suffix">块</span>
+        </div>
+      </div>
+      <div class="stat-card">
         <div class="stat-label">显存总量</div>
         <div class="stat-value">
           {{ formatNumber(overviewStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span>
@@ -221,6 +227,26 @@
             <div class="local-stat-card">
               <div class="stat-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="4" y="4" width="16" height="16" rx="2"/>
+                  <rect x="9" y="9" width="6" height="6"/>
+                  <line x1="9" y1="1" x2="9" y2="4"/>
+                  <line x1="15" y1="1" x2="15" y2="4"/>
+                  <line x1="9" y1="20" x2="9" y2="23"/>
+                  <line x1="15" y1="20" x2="15" y2="23"/>
+                  <line x1="20" y1="9" x2="23" y2="9"/>
+                  <line x1="20" y1="14" x2="23" y2="14"/>
+                  <line x1="1" y1="9" x2="4" y2="9"/>
+                  <line x1="1" y1="14" x2="4" y2="14"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">GPU卡总数</div>
+                <div class="stat-value">{{ localStats.total_gpus }}<span class="stat-unit-suffix">块</span></div>
+              </div>
+            </div>
+            <div class="local-stat-card">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 2L2 7l10 5 10-5-10-5z"/>
                   <path d="M2 17l10 5 10-5"/>
                   <path d="M2 12l10 5 10-5"/>
@@ -296,10 +322,10 @@
               <div class="chart-title">
                 运行网络分布
               </div>
-              <template v-if="localGpuTierData.length && localGpuTierOption">
-                <v-chart :option="localGpuTierOption" autoresize />
+              <template v-if="localNetworkData.length && localNetworkOption">
+                <v-chart :option="localNetworkOption" autoresize />
               </template>
-              <div v-if="!localGpuTierData.length || !localGpuTierOption" class="no-data">
+              <div v-if="!localNetworkData.length || !localNetworkOption" class="no-data">
                 暂无数据
               </div>
             </div>
@@ -330,6 +356,26 @@
               <div class="stat-info">
                 <div class="stat-label">设备总数</div>
                 <div class="stat-value">{{ centralStats.total_devices }}<span class="stat-unit-suffix">台</span></div>
+              </div>
+            </div>
+            <div class="central-stat-card">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="4" y="4" width="16" height="16" rx="2"/>
+                  <rect x="9" y="9" width="6" height="6"/>
+                  <line x1="9" y1="1" x2="9" y2="4"/>
+                  <line x1="15" y1="1" x2="15" y2="4"/>
+                  <line x1="9" y1="20" x2="9" y2="23"/>
+                  <line x1="15" y1="20" x2="15" y2="23"/>
+                  <line x1="20" y1="9" x2="23" y2="9"/>
+                  <line x1="20" y1="14" x2="23" y2="14"/>
+                  <line x1="1" y1="9" x2="4" y2="9"/>
+                  <line x1="1" y1="14" x2="4" y2="14"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <div class="stat-label">GPU卡总数</div>
+                <div class="stat-value">{{ centralStats.total_gpus }}<span class="stat-unit-suffix">块</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -557,6 +603,8 @@ import { dashboardApi } from '../api'
 import chinaMapData from '../assets/china.json'
 import * as echarts from 'echarts'
 import { useTheme, watchThemeChange } from '../composables/useTheme'
+import { getTierNames, getTierKeys, TIER_COLORS } from '../utils/gpuTierUtils'
+import { loadTierList, getTierConfigForChart } from '../store/gpuTierStore'
 
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
 
@@ -643,6 +691,7 @@ const timeType = inject('timeType')
 
 const overviewStats = ref({
   total_devices: 0,
+  total_gpus: 0,
   total_memory_gb: 0,
   total_compute_tflops: 0,
   avg_gpu_usage: 0,
@@ -660,6 +709,7 @@ const purposeByOrgData = ref({ purposes: [], data: [] })
 const provinceData = ref([])
 const localStats = ref({
   total_devices: 0,
+  total_gpus: 0,
   total_memory_gb: 0,
   total_compute_tflops: 0,
   avg_gpu_usage: 0,
@@ -669,9 +719,11 @@ const localStats = ref({
 })
 const localGpuTierData = ref([])
 const localPurposeData = ref([])
+const localNetworkData = ref([])
 const centralData = ref([])
 const centralStats = ref({
   total_devices: 0,
+  total_gpus: 0,
   total_memory_gb: 0,
   total_compute_tflops: 0,
   avg_gpu_usage: 0,
@@ -1136,8 +1188,9 @@ const gpuTierPageCount = computed(() =>
 const gpuTierOption = computed(() => {
   const colors = getAllColors()
   const tierColors = [colors.chart3, colors.chart4, colors.chart5, colors.chart6]
-  const tierNames = ['高端卡', '中端卡', '低端卡', '未知']
-  const tierKeys = ['high', 'medium', 'low', 'unknown']
+  const tierConfig = getTierConfigForChart()
+  const tierNames = tierConfig.names
+  const tierKeys = tierConfig.keys
   
   if (gpuTierChartType.value === 'pie') {
     const totals = tierKeys.map((key, index) => ({
@@ -1617,6 +1670,63 @@ const localGpuTierOption = computed(() => {
         name: d.name,
         value: d.value,
         itemStyle: { color: tierColors[i % tierColors.length] }
+      }))
+    }]
+  }
+})
+
+const localNetworkOption = computed(() => {
+  if (!localNetworkData.value || !localNetworkData.value.length) {
+    return null
+  }
+  const hasValidData = localNetworkData.value.some(d => d.value > 0)
+  if (!hasValidData) {
+    return null
+  }
+  const colors = getAllColors()
+  const networkColors = [colors.chart1, colors.chart2, colors.chart3, colors.chart4, colors.chart5, colors.chart6]
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: colors.panelBgStart,
+      borderColor: colors.border,
+      textStyle: { color: colors.text },
+      formatter: '{b}: {c}块 ({d}%)'
+    },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '65%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
+      itemStyle: {
+        borderRadius: 6,
+        borderColor: colors.panelBgStart,
+        borderWidth: 2
+      },
+      label: {
+        show: true,
+        fontSize: 11,
+        color: colors.textSecondary,
+        formatter: '{b}\n{c}块'
+      },
+      emphasis: {
+        label: {
+          show: true,
+          fontSize: 12,
+          fontWeight: 'bold',
+          color: colors.text
+        }
+      },
+      labelLine: {
+        show: true,
+        length: 8,
+        length2: 8
+      },
+      data: localNetworkData.value.map((d, i) => ({
+        name: d.name,
+        value: d.value,
+        itemStyle: { color: networkColors[i % networkColors.length] }
       }))
     }]
   }
@@ -2250,6 +2360,7 @@ const fetchData = async () => {
       localStatsData,
       localGpuTier,
       localPurpose,
+      localNetwork,
       central,
       centralStatsData,
       centralGpuTier,
@@ -2268,6 +2379,7 @@ const fetchData = async () => {
       dashboardApi.getLocalStats(globalTimeRange.value, timeType.value, network, purposeFilter),
       dashboardApi.getLocalGpuTier(network, purposeFilter),
       dashboardApi.getLocalPurpose(network, purposeFilter),
+      dashboardApi.getLocalNetwork(network, purposeFilter),
       dashboardApi.getCentralBubble(timeType.value, network, purposeFilter),
       dashboardApi.getCentralStats(globalTimeRange.value, timeType.value, network, purposeFilter),
       dashboardApi.getCentralGpuTier(network, purposeFilter),
@@ -2287,6 +2399,7 @@ const fetchData = async () => {
     localStats.value = localStatsData
     localGpuTierData.value = localGpuTier
     localPurposeData.value = localPurpose
+    localNetworkData.value = localNetwork
     centralData.value = central
     centralStats.value = centralStatsData
     centralGpuTierData.value = centralGpuTier
@@ -2417,6 +2530,7 @@ let cleanup = null
 onMounted(() => {
   fetchData()
   startCarousel()
+  loadTierList()
   cleanup = watchThemeChange(() => {
     fetchData()
   })
