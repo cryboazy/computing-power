@@ -78,8 +78,8 @@
             <div class="action-buttons">
               <div class="action-row">
                 <el-radio-group v-model="aggregationMode" @change="resetRefreshDays">
-                  <el-radio-button label="days">按天数</el-radio-button>
-                  <el-radio-button label="dateRange">按时间段</el-radio-button>
+                  <el-radio-button value="days">按天数</el-radio-button>
+                  <el-radio-button value="dateRange">按时间段</el-radio-button>
                 </el-radio-group>
               </div>
               <div class="action-row" v-if="aggregationMode === 'days'">
@@ -1592,8 +1592,6 @@ const formatTaskTime = (timeStr) => {
     gap: 8px;
     
     &.right {
-      margin-right: 50px;
-      
       .decoration-line {
         background: linear-gradient(90deg, var(--theme-glow) 0%, transparent 100%);
       }

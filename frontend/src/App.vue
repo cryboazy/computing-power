@@ -845,6 +845,43 @@ onUnmounted(() => {
       }
     }
   }
+
+  > .close-btn {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
+    border: 1px solid var(--theme-border-heavy);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+
+    svg {
+      width: 16px;
+      height: 16px;
+      color: var(--theme-primary);
+      transition: all 0.3s ease;
+    }
+
+    &:hover {
+      border-color: var(--theme-danger);
+      box-shadow: 0 0 15px var(--theme-danger);
+
+      svg {
+        color: var(--theme-danger);
+      }
+    }
+
+    &:active {
+      transform: scale(0.95);
+    }
+  }
 }
 
 .password-form {

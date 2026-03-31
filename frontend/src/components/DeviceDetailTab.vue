@@ -555,7 +555,7 @@ const createPieOption = (data) => {
       backgroundColor: colors.panelBgStart,
       borderColor: colors.border,
       textStyle: { color: colors.text },
-      formatter: '{b}: {c}台 ({d}%)'
+      formatter: '{b}: {c}块 ({d}%)'
     },
     legend: {
       orient: 'vertical',
@@ -581,7 +581,7 @@ const createPieOption = (data) => {
       label: {
         show: true,
         position: 'outside',
-        formatter: '{b}: {c}台\n{d}%',
+        formatter: '{b}: {c}块\n{d}%',
         color: colors.textSecondary,
         fontSize: 10
       },
@@ -617,7 +617,7 @@ const createBarOption = (data) => {
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        return `${params[0].axisValue}: ${params[0].value}台`
+        return `${params[0].axisValue}: ${params[0].value}块`
       }
     },
     grid: {
@@ -654,7 +654,7 @@ const createBarOption = (data) => {
           },
           borderRadius: [0, 4, 4, 0]
         },
-        label: { show: true, position: 'right', formatter: '{c}台', color: colors.textSecondary, fontSize: 10 }
+        label: { show: true, position: 'right', formatter: '{c}块', color: colors.textSecondary, fontSize: 10 }
       }))
     }]
   }

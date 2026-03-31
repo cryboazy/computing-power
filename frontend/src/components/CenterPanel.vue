@@ -2384,7 +2384,7 @@ const fetchData = async () => {
       dashboardApi.getCentralStats(globalTimeRange.value, timeType.value, network, purposeFilter),
       dashboardApi.getCentralGpuTier(network, purposeFilter),
       dashboardApi.getCentralPurpose(network, purposeFilter),
-      dashboardApi.getCentralTrend(timeType.value, network),
+      dashboardApi.getCentralTrend(globalTimeRange.value, timeType.value, network),
       dashboardApi.getCarouselUsageTrend(timeType.value, null, null, getTimeGrainFromRange(globalTimeRange.value), getStartDateFromRange(globalTimeRange.value), null, null, null, network, purposeFilter)
     ])
     

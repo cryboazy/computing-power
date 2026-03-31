@@ -135,8 +135,8 @@ export const dashboardApi = {
     if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
     return api.get('/local/network', { params })
   },
-  getLocalTrend: (timeType = 'work', network = null) => {
-    const params = { time_type: timeType }
+  getLocalTrend: (timeRange = 'month', timeType = 'work', network = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
     if (network) params.network = network
     return api.get('/local/trend', { params })
   },
@@ -164,8 +164,8 @@ export const dashboardApi = {
     if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
     return api.get('/central/purpose', { params })
   },
-  getCentralTrend: (timeType = 'work', network = null) => {
-    const params = { time_type: timeType }
+  getCentralTrend: (timeRange = 'month', timeType = 'work', network = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
     if (network) params.network = network
     return api.get('/central/trend', { params })
   },

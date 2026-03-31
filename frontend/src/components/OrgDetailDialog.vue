@@ -171,6 +171,7 @@ import OrgUsageDetailTab from './OrgUsageDetailTab.vue'
 
 const globalNetworkFilter = inject('globalNetworkFilter')
 const networkList = inject('networkList')
+const purposeList = inject('purposeList')
 
 const props = defineProps({
   visible: {
@@ -273,9 +274,12 @@ const getDateRange = (type) => {
 
 const dateRange = ref(getDateRangeFromTimeRange(props.timeRange))
 const selectedPurpose = ref('')
-const purposeList = ref([])
 
 const fetchPurposeList = async () => {
+  if (purposeList.value && purposeList.value.length > 0) {
+    return
+  }
+
   try {
     const data = await dashboardApi.getPurposeDict()
     const options = (data || []).map(item => ({
@@ -285,12 +289,6 @@ const fetchPurposeList = async () => {
     purposeList.value = [{ value: '', label: '全部用途' }, ...options]
   } catch (error) {
     console.error('Failed to fetch purpose list:', error)
-    purposeList.value = [
-      { value: '', label: '全部用途' },
-      { value: 1, label: '训练' },
-      { value: 2, label: '研发' },
-      { value: 3, label: '推理' }
-    ]
   }
 }
 
