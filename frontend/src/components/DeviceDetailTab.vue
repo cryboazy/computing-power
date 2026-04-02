@@ -137,7 +137,7 @@
           <el-input
             v-model="searchQuery"
             placeholder="搜索设备..."
-            prefix-icon="Search"
+            :prefix-icon="SearchIcon"
             size="small"
             style="width: 200px"
             clearable
@@ -343,6 +343,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download, Search, Loading } from '@element-plus/icons-vue'
+import { h } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -362,6 +363,8 @@ use([
 ])
 
 const { getAllColors } = useTheme()
+
+const SearchIcon = h(Search)
 
 const props = defineProps({
   orgDetail: {
@@ -431,14 +434,18 @@ const getOnlineStatusText = (isOnline) => {
 }
 
 const getPurposeText = (purpose) => {
-  const item = purposeDict.value.find(p => p.value === purpose)
+  if (purpose === null || purpose === undefined || purpose === '') return '-'
+  const item = purposeDict.value.find(p => String(p.value) === String(purpose))
   return item?.label || '-'
 }
 
 const getPurposeTagStyle = (purpose) => {
+  if (purpose === null || purpose === undefined || purpose === '') {
+    return { backgroundColor: 'var(--theme-info)20', borderColor: 'var(--theme-info)', color: 'var(--theme-info)' }
+  }
   const colors = getAllColors()
   const chartColors = [colors.primary, colors.warning, colors.success, colors.chart1, colors.chart2, colors.chart3]
-  const index = purposeDict.value.findIndex(p => p.value === purpose)
+  const index = purposeDict.value.findIndex(p => String(p.value) === String(purpose))
   if (index >= 0) {
     const color = chartColors[index % chartColors.length]
     return { backgroundColor: color + '20', borderColor: color, color: color }
@@ -692,7 +699,10 @@ const fetchDistributionData = async () => {
 const fetchPurposeDict = async () => {
   try {
     const data = await dashboardApi.getPurposeDict()
-    purposeDict.value = data || []
+    purposeDict.value = (data || []).map(item => ({
+      value: item.dict_value,
+      label: item.dict_label
+    })).filter(item => item.value !== undefined && item.value !== null)
   } catch (error) {
     console.error('Failed to fetch purpose dict:', error)
     purposeDict.value = []
@@ -703,6 +713,17 @@ watch(() => props.orgId, (newVal) => {
   if (newVal) {
     fetchDistributionData()
   }
+})
+
+watch(() => props.orgDetail, (newVal) => {
+  if (newVal) {
+    currentPage.value = 1
+    searchQuery.value = ''
+  }
+})
+
+watch(searchQuery, () => {
+  currentPage.value = 1
 })
 
 onMounted(() => {
