@@ -1,5 +1,4 @@
 import hashlib
-import secrets
 import json
 import asyncio
 import os
@@ -12,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 
 from app.local_database import get_local_db, LOCAL_DB_PATH, local_engine
-from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict, LocalGpuTierDict, LocalCacheMetadata
+from app.local_models import LocalSystemConfig, LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats, LocalPurposeDict, LocalGpuTierDict, LocalCacheMetadata, LocalAnalysisReport, LocalOrganization
 from app.gpu_tier_utils import GPUTierManager
 from app.aggregator import DataAggregator
 from app.database import SessionLocal, engine
@@ -699,10 +698,14 @@ def get_database_status(local_db: Session = Depends(get_local_db)):
         
         # 获取各表记录数
         tables_to_check = [
+            ("system_config", "系统配置"),
             ("cached_organization", "组织缓存"),
             ("cached_device", "设备缓存"),
             ("cached_gpu_card_info", "GPU卡信息缓存"),
             ("cached_network", "网络缓存"),
+            ("cached_purpose_dict", "用途字典缓存"),
+            ("cached_gpu_tier_dict", "GPU档次字典缓存"),
+            ("device_distribution_cache", "设备分布缓存"),
             ("daily_gpu_usage_summary", "日GPU使用汇总"),
             ("daily_device_summary", "日设备汇总"),
             ("org_gpu_usage_summary", "组织GPU使用汇总"),
@@ -710,7 +713,8 @@ def get_database_status(local_db: Session = Depends(get_local_db)):
             ("org_hourly_stats", "组织小时统计"),
             ("statistics_data", "统计数据"),
             ("cache_metadata", "缓存元数据"),
-            ("aggregation_task", "聚合任务")
+            ("aggregation_task", "聚合任务"),
+            ("analysis_report", "分析报告")
         ]
         
         for table_name, display_name in tables_to_check:
@@ -983,3 +987,241 @@ def delete_gpu_tier(tier_id: int, db: Session = Depends(get_local_db)):
     db.commit()
 
     return {"success": True, "message": "GPU档次删除成功"}
+
+
+class ExportRequest(BaseModel):
+    start_date: str
+    end_date: str
+
+
+@router.post("/export/usage-data")
+def export_usage_data(request: ExportRequest, local_db: Session = Depends(get_local_db)):
+    try:
+        start_date = datetime.strptime(request.start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(request.end_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="日期格式错误，请使用YYYY-MM-DD格式")
+    
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+    
+    days_diff = (end_date - start_date).days + 1
+    if days_diff > 365:
+        raise HTTPException(status_code=400, detail="日期范围不能超过365天")
+    
+    if end_date > date.today():
+        raise HTTPException(status_code=400, detail="结束日期不能是未来日期")
+    
+    main_db = SessionLocal()
+    try:
+        aggregator = DataAggregator(main_db, local_db)
+        data = aggregator.get_export_data(start_date, end_date)
+        return {"success": True, "data": data, "total": len(data)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"导出数据失败: {str(e)}")
+    finally:
+        main_db.close()
+
+
+class ReportCreateRequest(BaseModel):
+    org_id: int
+    org_name: str
+    title: str
+    content: str
+    file_size: int = 0
+
+
+class ReportUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    org_id: Optional[int] = None
+    org_name: Optional[str] = None
+
+
+class ReportBatchDeleteRequest(BaseModel):
+    ids: List[int]
+
+
+@router.get("/reports")
+def get_reports(
+    org_id: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 20,
+    db: Session = Depends(get_local_db)
+):
+    query = db.query(LocalAnalysisReport).filter(LocalAnalysisReport.status == 1)
+    
+    if org_id:
+        query = query.filter(LocalAnalysisReport.org_id == org_id)
+    
+    total = query.count()
+    reports = query.order_by(LocalAnalysisReport.create_time.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": r.id,
+                "org_id": r.org_id,
+                "org_name": r.org_name,
+                "title": r.title,
+                "file_size": r.file_size,
+                "create_time": r.create_time.strftime("%Y-%m-%d %H:%M:%S") if r.create_time else None
+            }
+            for r in reports
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+
+@router.post("/reports")
+def create_report(request: ReportCreateRequest, db: Session = Depends(get_local_db)):
+    report = LocalAnalysisReport(
+        org_id=request.org_id,
+        org_name=request.org_name,
+        title=request.title,
+        content=request.content,
+        file_size=request.file_size,
+        status=1
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    
+    return {
+        "success": True,
+        "message": "报告创建成功",
+        "data": {
+            "id": report.id,
+            "org_id": report.org_id,
+            "org_name": report.org_name,
+            "title": report.title,
+            "file_size": report.file_size,
+            "create_time": report.create_time.strftime("%Y-%m-%d %H:%M:%S") if report.create_time else None
+        }
+    }
+
+
+@router.post("/reports/batch")
+def batch_create_reports(
+    org_id: int,
+    org_name: str,
+    reports: List[ReportCreateRequest],
+    db: Session = Depends(get_local_db)
+):
+    created_reports = []
+    for req in reports[:20]:
+        report = LocalAnalysisReport(
+            org_id=org_id,
+            org_name=org_name,
+            title=req.title,
+            content=req.content,
+            file_size=req.file_size,
+            status=1
+        )
+        db.add(report)
+        created_reports.append(report)
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": f"成功创建 {len(created_reports)} 个报告",
+        "data": [
+            {
+                "id": r.id,
+                "org_id": r.org_id,
+                "org_name": r.org_name,
+                "title": r.title,
+                "file_size": r.file_size,
+                "create_time": r.create_time.strftime("%Y-%m-%d %H:%M:%S") if r.create_time else None
+            }
+            for r in created_reports
+        ]
+    }
+
+
+@router.put("/reports/{report_id}")
+def update_report(report_id: int, request: ReportUpdateRequest, db: Session = Depends(get_local_db)):
+    report = db.query(LocalAnalysisReport).filter(LocalAnalysisReport.id == report_id).first()
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    
+    if request.title is not None:
+        report.title = request.title
+    if request.org_id is not None:
+        report.org_id = request.org_id
+    if request.org_name is not None:
+        report.org_name = request.org_name
+    
+    report.update_time = datetime.now()
+    db.commit()
+    db.refresh(report)
+    
+    return {
+        "success": True,
+        "message": "报告更新成功",
+        "data": {
+            "id": report.id,
+            "org_id": report.org_id,
+            "org_name": report.org_name,
+            "title": report.title,
+            "file_size": report.file_size,
+            "create_time": report.create_time.strftime("%Y-%m-%d %H:%M:%S") if report.create_time else None
+        }
+    }
+
+
+@router.delete("/reports/{report_id}")
+def delete_report(report_id: int, db: Session = Depends(get_local_db)):
+    report = db.query(LocalAnalysisReport).filter(LocalAnalysisReport.id == report_id).first()
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    
+    report.status = 0
+    report.update_time = datetime.now()
+    db.commit()
+    
+    return {"success": True, "message": "报告删除成功"}
+
+
+@router.post("/reports/batch-delete")
+def batch_delete_reports(request: ReportBatchDeleteRequest, db: Session = Depends(get_local_db)):
+    if len(request.ids) > 50:
+        raise HTTPException(status_code=400, detail="批量删除数量不能超过50个")
+    
+    deleted_count = db.query(LocalAnalysisReport).filter(
+        LocalAnalysisReport.id.in_(request.ids)
+    ).update({"status": 0, "update_time": datetime.now()}, synchronize_session=False)
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": f"成功删除 {deleted_count} 个报告"
+    }
+
+
+@router.get("/organizations")
+def get_organizations(db: Session = Depends(get_local_db)):
+    orgs = db.query(LocalOrganization).filter(
+        LocalOrganization.deleted == 0,
+        LocalOrganization.status == 1
+    ).order_by(LocalOrganization.sort).all()
+    
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": o.id,
+                "name": o.name,
+                "code": o.code,
+                "type": o.type,
+                "parent_id": o.parent_id
+            }
+            for o in orgs
+        ]
+    }

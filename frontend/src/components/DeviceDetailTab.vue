@@ -44,7 +44,7 @@
         </div>
         <div class="stat-info">
           <div class="stat-label">显存总量</div>
-          <div class="stat-value">{{ formatNumber(orgDetail?.total_memory_gb || 0) }}<span class="stat-unit-suffix">GB</span></div>
+          <div class="stat-value">{{ formatMemory(orgDetail?.total_memory_gb || 0).value }}<span class="stat-unit-suffix">{{ formatMemory(orgDetail?.total_memory_gb || 0).unit }}</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -78,7 +78,7 @@
         </div>
         <div class="stat-info">
           <div class="stat-label">显存使用率</div>
-          <div class="stat-value" :title="`显存已用量: ${formatNumber(orgDetail?.memory_used_gb || 0)} GB`">{{ formatNumber(orgDetail?.memory_usage_rate || 0, 2) }}<span class="stat-unit-suffix">%</span></div>
+          <div class="stat-value" :title="`显存已用量: ${formatMemoryStr(orgDetail?.memory_used_gb || 0)}`">{{ formatNumber(orgDetail?.memory_usage_rate || 0, 2) }}<span class="stat-unit-suffix">%</span></div>
         </div>
       </div>
       <div class="stat-card">
@@ -142,10 +142,6 @@
             style="width: 200px"
             clearable
           />
-          <el-button type="primary" size="small" @click="exportData">
-            <el-icon><Download /></el-icon>
-            导出
-          </el-button>
         </div>
       </div>
       
@@ -270,7 +266,7 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-tooltip :content="`显存已用量: ${row.memory_used_gb || 0} GB`" placement="top">
+            <el-tooltip :content="`显存已用量: ${formatMemoryStr(row.memory_used_gb || 0)}`" placement="top">
               <el-progress 
                 :percentage="Math.min(100, Math.round(row.memory_usage_rate))" 
                 :color="getUsageColor(row.memory_usage_rate)"
@@ -482,51 +478,6 @@ const handleDeviceClick = (row) => {
   deviceUsageDialogVisible.value = true
 }
 
-const exportData = () => {
-  if (!allDevices.value.length) {
-    ElMessage.warning('没有可导出的数据')
-    return
-  }
-  
-  tableLoading.value = true
-  
-  setTimeout(() => {
-    try {
-      const headers = ['序号', '设备名称', 'GPU型号', 'GPU数量', '显存(GB)', '总算力', 'CPU核数', '内存(GB)', '存储(GB)', '使用率(%)', '运行网络', '用途', '状态', '更新时间']
-      const rows = allDevices.value.map((device, index) => [
-        index + 1,
-        device.name || '',
-        device.gpu_model || '',
-        device.gpu_count || 0,
-        device.memory_gb || 0,
-        device.compute_tflops || 0,
-        device.cpu_cores || 0,
-        device.memory_size || 0,
-        device.disk_size || 0,
-        device.usage_rate || 0,
-        device.net_module_name || '-',
-        getPurposeText(device.purpose),
-        device.is_online === 1 ? '在线' : device.is_online === 0 ? '离线' : '异常',
-        formatDateTime(device.updated_at)
-      ])
-      
-      const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `${props.orgDetail?.org_name || '设备详情'}_${new Date().toISOString().split('T')[0]}.csv`
-      link.click()
-      
-      ElMessage.success('导出成功')
-    } catch (error) {
-      console.error('Export failed:', error)
-      ElMessage.error('导出失败')
-    } finally {
-      tableLoading.value = false
-    }
-  }, 500)
-}
-
 const getChartColors = () => {
   const colors = getAllColors()
   return [
@@ -550,6 +501,19 @@ const formatNumber = (num, decimals = 0) => {
     return n.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
   }
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+const formatMemory = (gb) => {
+  if (!gb || gb === 0) return { value: '0', unit: 'GB' }
+  if (gb >= 1024) {
+    return { value: (gb / 1024).toFixed(2), unit: 'TB' }
+  }
+  return { value: Math.round(gb).toString(), unit: 'GB' }
+}
+
+const formatMemoryStr = (gb) => {
+  const { value, unit } = formatMemory(gb)
+  return `${value} ${unit}`
 }
 
 const createPieOption = (data) => {

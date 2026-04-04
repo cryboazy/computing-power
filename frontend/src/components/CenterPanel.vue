@@ -16,7 +16,7 @@
       <div class="stat-card">
         <div class="stat-label">显存总量</div>
         <div class="stat-value">
-          {{ formatNumber(overviewStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span>
+          {{ formatMemory(overviewStats.total_memory_gb).value }}<span class="stat-unit-suffix">{{ formatMemory(overviewStats.total_memory_gb).unit }}</span>
         </div>
       </div>
       <div class="stat-card">
@@ -33,7 +33,7 @@
       </div>
       <div class="stat-card">
         <div class="stat-label">显存使用率</div>
-        <div class="stat-value" :title="`显存已用量: ${formatNumber(overviewStats.memory_used_gb)} GB`">
+        <div class="stat-value" :title="`显存已用量: ${formatMemoryStr(overviewStats.memory_used_gb)}`">
           {{ formatNumber(overviewStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span>
         </div>
       </div>
@@ -254,7 +254,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存总量</div>
-                <div class="stat-value">{{ formatNumber(localStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span></div>
+                <div class="stat-value">{{ formatMemory(localStats.total_memory_gb).value }}<span class="stat-unit-suffix">{{ formatMemory(localStats.total_memory_gb).unit }}</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -288,7 +288,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存使用率</div>
-                <div class="stat-value" :title="`显存已用量: ${formatNumber(localStats.memory_used_gb)} GB`">{{ formatNumber(localStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span></div>
+                <div class="stat-value" :title="`显存已用量: ${formatMemoryStr(localStats.memory_used_gb)}`">{{ formatNumber(localStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
             <div class="local-stat-card">
@@ -388,7 +388,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存总量</div>
-                <div class="stat-value">{{ formatNumber(centralStats.total_memory_gb) }}<span class="stat-unit-suffix">GB</span></div>
+                <div class="stat-value">{{ formatMemory(centralStats.total_memory_gb).value }}<span class="stat-unit-suffix">{{ formatMemory(centralStats.total_memory_gb).unit }}</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -422,7 +422,7 @@
               </div>
               <div class="stat-info">
                 <div class="stat-label">显存使用率</div>
-                <div class="stat-value" :title="`显存已用量: ${formatNumber(centralStats.memory_used_gb)} GB`">{{ formatNumber(centralStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span></div>
+                <div class="stat-value" :title="`显存已用量: ${formatMemoryStr(centralStats.memory_used_gb)}`">{{ formatNumber(centralStats.memory_usage_rate, 2) }}<span class="stat-unit-suffix">%</span></div>
               </div>
             </div>
             <div class="central-stat-card">
@@ -474,7 +474,7 @@
                     <span class="org-name">{{ item.name }}</span>
                     <span class="org-value">{{ item.value }}台</span>
                     <span class="org-value">{{ item.gpu_count }}块</span>
-                    <span class="org-value">{{ formatNumber(item.memory_gb) }}GB</span>
+                    <span class="org-value">{{ formatMemoryStr(item.memory_gb) }}</span>
                     <span class="org-value">{{ formatNumber(item.compute_tflops) }}TF</span>
                   </div>
                 </template>
@@ -603,8 +603,7 @@ import { dashboardApi } from '../api'
 import chinaMapData from '../assets/china.json'
 import * as echarts from 'echarts'
 import { useTheme, watchThemeChange } from '../composables/useTheme'
-import { getTierNames, getTierKeys, TIER_COLORS } from '../utils/gpuTierUtils'
-import { loadTierList, getTierConfigForChart } from '../store/gpuTierStore'
+import { loadTierList, getTierConfigForChart, getTierColors } from '../store/gpuTierStore'
 
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
 
@@ -783,6 +782,19 @@ const formatNumber = (num, decimals = 0) => {
   })
 }
 
+const formatMemory = (gb) => {
+  if (!gb || gb === 0) return { value: '0', unit: 'GB' }
+  if (gb >= 1024) {
+    return { value: (gb / 1024).toFixed(2), unit: 'TB' }
+  }
+  return { value: Math.round(gb).toString(), unit: 'GB' }
+}
+
+const formatMemoryStr = (gb) => {
+  const { value, unit } = formatMemory(gb)
+  return `${value} ${unit}`
+}
+
 const createPieOption = (data, colors) => {
   const themeColors = getAllColors()
   return {
@@ -824,7 +836,7 @@ const createPieOption = (data, colors) => {
           : `${compute_tflops.toFixed(2)} TF`
         const memoryDisplay = memory_gb >= 1024 
           ? `${(memory_gb / 1024).toFixed(2)} TB` 
-          : `${memory_gb.toFixed(2)} GB`
+          : `${Math.round(memory_gb)} GB`
         
         return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${originalData.name}</div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -964,7 +976,7 @@ const orgTypeBarOption = computed(() => {
           : `${compute_tflops.toFixed(2)} TF`
         const memoryDisplay = memory_gb >= 1024 
           ? `${(memory_gb / 1024).toFixed(2)} TB` 
-          : `${memory_gb.toFixed(2)} GB`
+          : `${Math.round(memory_gb)} GB`
         
         return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${originalName}</div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -1187,10 +1199,10 @@ const gpuTierPageCount = computed(() =>
 
 const gpuTierOption = computed(() => {
   const colors = getAllColors()
-  const tierColors = [colors.chart3, colors.chart4, colors.chart5, colors.chart6]
-  const tierConfig = getTierConfigForChart()
+  const tierConfig = getTierConfigForChart(colors)
   const tierNames = tierConfig.names
   const tierKeys = tierConfig.keys
+  const tierColors = tierConfig.colors
   
   if (gpuTierChartType.value === 'pie') {
     const totals = tierKeys.map((key, index) => ({
@@ -1542,7 +1554,7 @@ const mapOption = computed(() => {
             : `${d.compute_tflops.toFixed(2)} TF`
           const memoryDisplay = d.memory_gb >= 1024 
             ? `${(d.memory_gb / 1024).toFixed(2)} TB` 
-            : `${d.memory_gb.toFixed(2)} GB`
+            : `${Math.round(d.memory_gb)} GB`
           
           return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${params.name}</div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -1835,7 +1847,7 @@ const centralBarOption = computed(() => {
           : `${compute_tflops.toFixed(2)} TF`
         const memoryDisplay = memory_gb >= 1024 
           ? `${(memory_gb / 1024).toFixed(2)} TB` 
-          : `${memory_gb.toFixed(2)} GB`
+          : `${Math.round(memory_gb)} GB`
         
         return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${item.name}</div>
           <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -2406,7 +2418,6 @@ const fetchData = async () => {
     centralPurposeData.value = centralPurpose
     centralTrendData.value = centralTrend
     carouselData.value = carousel
-    console.log('[CenterPanel] Carousel data:', carousel, 'length:', carousel?.length)
   } catch (error) {
     console.error('Failed to fetch center panel data:', error)
   }
@@ -2545,6 +2556,10 @@ watch(() => globalNetworkFilter?.value, () => {
 })
 
 watch(() => globalPurposeFilter?.value, () => {
+  fetchData()
+})
+
+watch(() => globalTimeRange?.value, () => {
   fetchData()
 })
 

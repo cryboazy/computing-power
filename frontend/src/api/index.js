@@ -248,4 +248,22 @@ export const adminApi = {
   updateGpuTierStatus: (id, status) => api.patch(`/admin/dict/gpu-tier/${id}/status`, { status })
 }
 
+export const exportApi = {
+  getUsageData: (startDate, endDate) => api.post('/admin/export/usage-data', {
+    start_date: startDate,
+    end_date: endDate
+  })
+}
+
+export const reportApi = {
+  getOrgReports: (orgId) => api.get(`/org/${orgId}/reports`),
+  getReportDetail: (reportId) => api.get(`/reports/${reportId}`),
+  getAdminReports: (params) => api.get('/admin/reports', { params }),
+  createReport: (data) => api.post('/admin/reports', data),
+  updateReport: (id, data) => api.put(`/admin/reports/${id}`, data),
+  deleteReport: (id) => api.delete(`/admin/reports/${id}`),
+  batchDeleteReports: (ids) => api.post('/admin/reports/batch-delete', { ids }),
+  getOrganizations: () => api.get('/admin/organizations')
+}
+
 export default api

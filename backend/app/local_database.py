@@ -43,7 +43,7 @@ def upgrade_local_db_schema():
         LocalDeviceHourlyStats, LocalOrgGpuUsageSummary, LocalStatisticsData,
         LocalOrgHourlyStats, LocalOrganization, LocalDevice, LocalGpuCardInfo,
         LocalNetwork, LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-        LocalGpuTierDict, LocalAggregationTask
+        LocalGpuTierDict, LocalAggregationTask, LocalAnalysisReport
     )
 
     db = LocalSessionLocal()
@@ -56,7 +56,7 @@ def upgrade_local_db_schema():
             LocalDeviceHourlyStats, LocalOrgGpuUsageSummary, LocalStatisticsData,
             LocalOrgHourlyStats, LocalOrganization, LocalDevice, LocalGpuCardInfo,
             LocalNetwork, LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-            LocalGpuTierDict, LocalAggregationTask
+            LocalGpuTierDict, LocalAggregationTask, LocalAnalysisReport
         ]
         
         changes_made = False
@@ -65,6 +65,10 @@ def upgrade_local_db_schema():
             table_name = model.__tablename__
             
             if table_name not in existing_tables:
+                print(f"  创建新表 {table_name}...")
+                model.__table__.create(db.bind, checkfirst=True)
+                print(f"  已创建表 {table_name}")
+                changes_made = True
                 continue
             
             existing_columns = {col["name"]: col for col in inspector.get_columns(table_name)}
@@ -115,7 +119,7 @@ def init_local_db(upgrade=False):
         LocalOrgGpuUsageSummary, LocalStatisticsData, LocalOrgHourlyStats,
         LocalOrganization, LocalDevice, LocalGpuCardInfo, LocalNetwork,
         LocalDeviceDistribution, LocalCacheMetadata, LocalPurposeDict,
-        LocalGpuTierDict, LocalAggregationTask
+        LocalGpuTierDict, LocalAggregationTask, LocalAnalysisReport
     )
     LocalBase.metadata.create_all(bind=local_engine)
     print("本地数据库表创建完成")

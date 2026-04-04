@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, case, desc, literal_column
+from sqlalchemy import func, and_, or_, desc
 from sqlalchemy.sql import text
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -13,7 +13,7 @@ from app.local_models import (
     LocalDailyGpuUsageSummary, LocalDailyDeviceSummary, LocalDeviceHourlyStats,
     LocalOrgGpuUsageSummary, LocalStatisticsData, LocalSystemConfig, LocalOrgHourlyStats,
     LocalOrganization, LocalDevice, LocalGpuCardInfo, LocalNetwork,
-    LocalCacheMetadata, LocalPurposeDict
+    LocalCacheMetadata, LocalPurposeDict, LocalAnalysisReport
 )
 from app.cache_sync import PURPOSE_DICT_TYPE, CacheSyncService, get_purpose_map
 from app.gpu_tier_utils import GPUTierManager
@@ -137,6 +137,8 @@ class OrgRanking(BaseModel):
     memory_capacity: float
     disk_capacity: float
     avg_gpu_usage: float
+    avg_memory_usage_rate: float
+    avg_memory_utilization: float
     rank: int
 
 
@@ -1521,7 +1523,9 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
             usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
         
         org_usage = local_db.query(
-            func.avg(usage_field).label('avg_usage')
+            func.avg(usage_field).label('avg_usage'),
+            func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage'),
+            func.avg(LocalOrgGpuUsageSummary.avg_memory_utilization).label('avg_memory_util')
         ).filter(
             LocalOrgGpuUsageSummary.organization_id3 == r.id,
             LocalOrgGpuUsageSummary.summary_time >= start_datetime,
@@ -1529,6 +1533,8 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
         ).first()
         
         avg_gpu_usage = round(float(org_usage.avg_usage or 0), 2) if org_usage and org_usage.avg_usage else 0
+        avg_memory_usage_rate = round(float(org_usage.avg_memory_usage or 0), 2) if org_usage and org_usage.avg_memory_usage else 0
+        avg_memory_utilization = round(float(org_usage.avg_memory_util or 0), 2) if org_usage and org_usage.avg_memory_util else 0
         
         rankings.append({
             'org_id': r.id,
@@ -1540,7 +1546,9 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
             'cpu_cores': int(r.cpu_cores or 0),
             'memory_capacity': float(r.memory_capacity or 0),
             'disk_capacity': float(r.disk_capacity or 0),
-            'avg_gpu_usage': avg_gpu_usage
+            'avg_gpu_usage': avg_gpu_usage,
+            'avg_memory_usage_rate': avg_memory_usage_rate,
+            'avg_memory_utilization': avg_memory_utilization
         })
     
     rankings.sort(key=lambda x: x['avg_gpu_usage'], reverse=True)
@@ -1558,6 +1566,8 @@ def calculate_org_ranking_cached(local_db, group_id=None, time_range='month', ti
             memory_capacity=r['memory_capacity'],
             disk_capacity=r['disk_capacity'],
             avg_gpu_usage=r['avg_gpu_usage'],
+            avg_memory_usage_rate=r['avg_memory_usage_rate'],
+            avg_memory_utilization=r['avg_memory_utilization'],
             rank=i+1
         ))
     
@@ -1694,7 +1704,9 @@ def get_province_ranking(
             usage_field = LocalOrgGpuUsageSummary.avg_gpu_usage_rate
         
         org_usage = local_db.query(
-            func.avg(usage_field).label('avg_usage')
+            func.avg(usage_field).label('avg_usage'),
+            func.avg(LocalOrgGpuUsageSummary.avg_memory_usage_rate).label('avg_memory_usage'),
+            func.avg(LocalOrgGpuUsageSummary.avg_memory_utilization).label('avg_memory_util')
         ).filter(
             LocalOrgGpuUsageSummary.organization_id3 == r.id,
             LocalOrgGpuUsageSummary.summary_time >= start_datetime,
@@ -1702,6 +1714,8 @@ def get_province_ranking(
         ).first()
         
         avg_gpu_usage = round(float(org_usage.avg_usage or 0), 2) if org_usage and org_usage.avg_usage else 0
+        avg_memory_usage_rate = round(float(org_usage.avg_memory_usage or 0), 2) if org_usage and org_usage.avg_memory_usage else 0
+        avg_memory_utilization = round(float(org_usage.avg_memory_util or 0), 2) if org_usage and org_usage.avg_memory_util else 0
         
         rankings.append({
             'org_id': r.id,
@@ -1713,7 +1727,9 @@ def get_province_ranking(
             'cpu_cores': int(r.cpu_cores or 0),
             'memory_capacity': float(r.memory_capacity or 0),
             'disk_capacity': float(r.disk_capacity or 0),
-            'avg_gpu_usage': avg_gpu_usage
+            'avg_gpu_usage': avg_gpu_usage,
+            'avg_memory_usage_rate': avg_memory_usage_rate,
+            'avg_memory_utilization': avg_memory_utilization
         })
     
     rankings.sort(key=lambda x: x['avg_gpu_usage'], reverse=True)
@@ -1731,6 +1747,8 @@ def get_province_ranking(
             memory_capacity=r['memory_capacity'],
             disk_capacity=r['disk_capacity'],
             avg_gpu_usage=r['avg_gpu_usage'],
+            avg_memory_usage_rate=r['avg_memory_usage_rate'],
+            avg_memory_utilization=r['avg_memory_utilization'],
             rank=i+1
         ))
     
@@ -2485,4 +2503,51 @@ def get_device_usage_trend(
         "monthly": monthly_result,
         "daily": daily_result,
         "hourly": hourly_result
+    }
+
+
+@router.get("/org/{org_id}/reports")
+def get_org_reports(
+    org_id: int,
+    local_db: Session = Depends(get_local_db)
+):
+    reports = local_db.query(LocalAnalysisReport).filter(
+        LocalAnalysisReport.org_id == org_id,
+        LocalAnalysisReport.status == 1
+    ).order_by(LocalAnalysisReport.create_time.desc()).all()
+    
+    return [
+        {
+            "id": r.id,
+            "org_id": r.org_id,
+            "org_name": r.org_name,
+            "title": r.title,
+            "file_size": r.file_size,
+            "create_time": r.create_time.strftime("%Y-%m-%d %H:%M:%S") if r.create_time else None
+        }
+        for r in reports
+    ]
+
+
+@router.get("/reports/{report_id}")
+def get_report_detail(
+    report_id: int,
+    local_db: Session = Depends(get_local_db)
+):
+    report = local_db.query(LocalAnalysisReport).filter(
+        LocalAnalysisReport.id == report_id,
+        LocalAnalysisReport.status == 1
+    ).first()
+    
+    if not report:
+        return {"error": "Report not found"}
+    
+    return {
+        "id": report.id,
+        "org_id": report.org_id,
+        "org_name": report.org_name,
+        "title": report.title,
+        "content": report.content,
+        "file_size": report.file_size,
+        "create_time": report.create_time.strftime("%Y-%m-%d %H:%M:%S") if report.create_time else None
     }

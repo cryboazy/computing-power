@@ -2,6 +2,7 @@
   <div class="dashboard">
     <header class="dashboard-header">
       <div class="header-left">
+        <ThemeSwitcher />
         <el-button class="admin-btn" @click="showPasswordDialog" text>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="admin-icon">
             <circle cx="12" cy="12" r="3"></circle>
@@ -10,11 +11,10 @@
             </path>
           </svg>
         </el-button>
-        <ThemeSwitcher />
+        <span class="time">{{ currentTime }}</span>
       </div>
       <h1 class="header-title">智能算力监测平台</h1>
       <div class="header-right">
-        <span class="time">{{ currentTime }}</span>
         <el-select v-model="globalNetworkFilter" class="network-select" size="small" placeholder="选择网络分类"
           :loading="networkLoading">
           <el-option label="全部网络" value="all" />
@@ -148,7 +148,7 @@
     </el-dialog>
 
     <el-dialog v-model="adminPanelVisible" width="800px" top="5vh" :close-on-click-modal="false" class="admin-dialog"
-      :show-close="false">
+      :show-close="false" :fullscreen="isAdminMaximized">
       <template #header>
         <div class="dialog-header">
           <div class="header-decoration">
@@ -160,12 +160,23 @@
             <span class="decoration-dot"></span>
             <span class="decoration-line"></span>
           </div>
-          <button class="close-btn" @click="adminPanelVisible = false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
+          <div class="window-controls">
+            <button class="control-btn" @click="toggleAdminMaximize" :title="isAdminMaximized ? '还原' : '最大化'">
+              <svg v-if="!isAdminMaximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3">
+                </path>
+              </svg>
+            </button>
+            <button class="control-btn close-btn" @click="adminPanelVisible = false" title="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
         </div>
       </template>
       <AdminPanel />
@@ -210,8 +221,13 @@ const toggleExpandMaximize = () => {
 
 const passwordDialogVisible = ref(false)
 const adminPanelVisible = ref(false)
+const isAdminMaximized = ref(false)
 const adminPassword = ref('')
 const passwordVerifying = ref(false)
+
+const toggleAdminMaximize = () => {
+  isAdminMaximized.value = !isAdminMaximized.value
+}
 
 const orgDetailVisible = ref(false)
 const currentOrgId = ref(null)
@@ -219,9 +235,9 @@ const currentOrgActiveTab = ref('devices')
 
 const timeType = ref('work')
 const TIME_TYPE_OPTIONS = [
-  { value: 'work', label: '工作时间使用率' },
-  { value: 'nonwork', label: '非工作时间使用率' },
-  { value: 'all', label: '全天使用率' }
+  { value: 'work', label: '工作时间' },
+  { value: 'nonwork', label: '非工作时间' },
+  { value: 'all', label: '全天' }
 ]
 
 const globalTimeRange = ref('month')
@@ -346,8 +362,8 @@ const usageThresholds = ref({
 
 const leftPanelVisible = ref(true)
 const rightPanelVisible = ref(true)
-const leftPanelWidth = ref(350)
-const rightPanelWidth = ref(350)
+const leftPanelWidth = ref(300)
+const rightPanelWidth = ref(300)
 const isDraggingLeft = ref(false)
 const isDraggingRight = ref(false)
 
@@ -489,7 +505,7 @@ onUnmounted(() => {
   }
 
   .network-select {
-    width: 100px;
+    width: 85px;
     flex-shrink: 0;
 
     :deep(.el-input__wrapper) {
@@ -509,7 +525,7 @@ onUnmounted(() => {
   }
 
   .purpose-select {
-    width: 100px;
+    width: 85px;
     flex-shrink: 0;
 
     :deep(.el-input__wrapper) {
@@ -529,7 +545,7 @@ onUnmounted(() => {
   }
 
   .time-type-select {
-    width: 120px;
+    width: 85px;
     flex-shrink: 0;
 
     :deep(.el-input__wrapper) {
@@ -549,7 +565,7 @@ onUnmounted(() => {
   }
 
   .time-range-select {
-    width: 100px;
+    width: 85px;
     flex-shrink: 0;
 
     :deep(.el-input__wrapper) {
@@ -755,7 +771,7 @@ onUnmounted(() => {
     gap: 8px;
 
     &.right {
-      margin-right: 50px;
+      margin-right: 110px;
 
       .decoration-line {
         background: linear-gradient(90deg, var(--theme-glow) 0%, transparent 100%);
@@ -846,7 +862,7 @@ onUnmounted(() => {
     }
   }
 
-  > .close-btn {
+  >.close-btn {
     position: absolute;
     right: 20px;
     top: 50%;

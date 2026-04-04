@@ -397,6 +397,241 @@
           </div>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="数据导出" name="export">
+        <div class="panel-section">
+          <div class="section-content">
+            <div class="export-header">
+              <div class="export-date-range">
+                <span class="export-label">导出日期范围:</span>
+                <el-date-picker
+                  v-model="exportDateRange"
+                  type="daterange"
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  :disabled-date="disabledExportDate"
+                  style="width: 280px"
+                />
+              </div>
+              <el-button 
+                type="primary" 
+                @click="handleExportData" 
+                :loading="exportLoading"
+                :disabled="!exportDateRange || exportDateRange.length !== 2"
+              >
+                <el-icon class="el-icon--left"><Download /></el-icon>
+                导出Excel
+              </el-button>
+            </div>
+            
+            <div class="export-info">
+              <div class="info-title">导出说明</div>
+              <ul class="info-list">
+                <li>数据将按照组织机构、设备用途、运行网络、时间类型进行分类汇总</li>
+                <li>静态数据（设备数、GPU数、总算力、显存总量）取时间区间最后一天的数据</li>
+                <li>使用率数据为区间内日均值的平均值，与大屏显示数据一致</li>
+                <li>总算力采用 FP16 精度计算</li>
+                <li>日期范围最大不超过365天</li>
+              </ul>
+            </div>
+
+            <div v-if="exportProgress.show" class="export-progress">
+              <el-progress :percentage="exportProgress.percent" :status="exportProgress.status" />
+              <span class="progress-text">{{ exportProgress.text }}</span>
+            </div>
+
+            <div v-if="exportResult.total > 0" class="export-result">
+              <div class="result-header">
+                <span class="result-title">导出结果预览</span>
+                <span class="result-count">共 {{ exportResult.total }} 条数据</span>
+              </div>
+              <el-table 
+                :data="exportResult.data.slice(0, 10)" 
+                style="width: 100%" 
+                border 
+                size="small"
+                max-height="300"
+              >
+                <el-table-column prop="组织机构名称" label="组织机构" width="150" show-overflow-tooltip />
+                <el-table-column prop="实际起始日期" label="实际起始" width="100" />
+                <el-table-column prop="实际结束日期" label="实际结束" width="100" />
+                <el-table-column prop="设备用途" label="设备用途" width="100" />
+                <el-table-column prop="运行网络" label="运行网络" width="100" />
+                <el-table-column prop="时间类型" label="时间类型" width="100" />
+                <el-table-column prop="设备数" label="设备数" width="80" />
+                <el-table-column prop="GPU数" label="GPU数" width="80" />
+                <el-table-column prop="总算力" label="总算力(TF)" width="100" />
+                <el-table-column prop="显存总量(GB)" label="显存(GB)" width="100" />
+                <el-table-column prop="平均GPU使用率(%)" label="GPU使用率(%)" width="110" />
+                <el-table-column prop="平均显存使用率(%)" label="显存使用率(%)" width="120" />
+                <el-table-column prop="平均显存利用率(%)" label="显存利用率(%)" width="120" />
+              </el-table>
+              <div v-if="exportResult.total > 10" class="result-hint">
+                仅显示前10条数据，完整数据已导出到Excel文件
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="报告管理" name="reports">
+        <div class="panel-section">
+          <div class="section-content">
+            <div class="report-upload-section">
+              <div class="section-title">上传报告</div>
+              <div class="upload-form">
+                <div class="form-row">
+                  <div class="form-item">
+                    <label>组织单位：</label>
+                    <el-tree-select
+                      v-model="reportForm.org_id"
+                      :data="organizationTree"
+                      :props="{ label: 'name', value: 'id', children: 'children' }"
+                      placeholder="选择组织单位"
+                      filterable
+                      check-strictly
+                      style="width: 300px"
+                    />
+                  </div>
+                  <div class="form-item">
+                    <label>报告标题：</label>
+                    <el-input v-model="reportForm.title" placeholder="输入报告标题" style="width: 300px" />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <el-upload
+                    ref="uploadRef"
+                    :auto-upload="false"
+                    :show-file-list="true"
+                    :limit="1"
+                    accept=".md,.markdown"
+                    :on-change="handleReportFileChange"
+                    :on-exceed="handleExceed"
+                  >
+                    <template #trigger>
+                      <el-button type="primary">
+                        <el-icon class="el-icon--left"><Upload /></el-icon>
+                        选择文件
+                      </el-button>
+                    </template>
+                    <el-button class="ml-3" type="success" @click="uploadReport" :loading="uploadLoading" :disabled="!reportForm.org_id || !reportForm.title || !reportForm.file">
+                      上传报告
+                    </el-button>
+                    <template #tip>
+                      <div class="upload-tip">仅支持 .md 或 .markdown 文件，文件大小不超过 10MB</div>
+                    </template>
+                  </el-upload>
+                </div>
+              </div>
+            </div>
+
+            <div class="report-batch-section">
+              <div class="section-title">批量上传</div>
+              <div class="batch-form">
+                <div class="form-row">
+                  <div class="form-item">
+                    <label>组织单位：</label>
+                    <el-tree-select
+                      v-model="batchReportForm.org_id"
+                      :data="organizationTree"
+                      :props="{ label: 'name', value: 'id', children: 'children' }"
+                      placeholder="选择组织单位"
+                      filterable
+                      check-strictly
+                      style="width: 300px"
+                    />
+                  </div>
+                </div>
+                <div class="form-row">
+                  <el-upload
+                    ref="batchUploadRef"
+                    :auto-upload="false"
+                    :show-file-list="true"
+                    :limit="20"
+                    multiple
+                    accept=".md,.markdown"
+                    :on-change="handleBatchReportFileChange"
+                    :on-exceed="handleBatchExceed"
+                  >
+                    <template #trigger>
+                      <el-button type="primary">
+                        <el-icon class="el-icon--left"><Upload /></el-icon>
+                        选择多个文件
+                      </el-button>
+                    </template>
+                    <el-button class="ml-3" type="success" @click="batchUploadReports" :loading="batchUploadLoading" :disabled="!batchReportForm.org_id || batchReportForm.files.length === 0">
+                      批量上传
+                    </el-button>
+                    <template #tip>
+                      <div class="upload-tip">批量上传时以文件名作为报告标题，最多上传20个文件</div>
+                    </template>
+                  </el-upload>
+                </div>
+              </div>
+            </div>
+
+            <div class="report-list-section">
+              <div class="section-header">
+                <div class="section-title">报告列表</div>
+                <div class="filter-row">
+                  <el-tree-select
+                    v-model="reportFilterOrg"
+                    :data="organizationTree"
+                    :props="{ label: 'name', value: 'id', children: 'children' }"
+                    placeholder="全部组织"
+                    clearable
+                    filterable
+                    check-strictly
+                    style="width: 250px"
+                    @change="loadReportList"
+                  />
+                </div>
+              </div>
+              <el-table :data="reportList" style="width: 100%" border @selection-change="handleReportSelection">
+                <el-table-column type="selection" width="55" />
+                <el-table-column prop="org_name" label="组织单位" width="200" show-overflow-tooltip />
+                <el-table-column prop="title" label="报告标题" show-overflow-tooltip>
+                  <template #default="scope">
+                    <div class="report-title-cell clickable" @click="viewReport(scope.row)">
+                      <el-icon class="report-icon"><Document /></el-icon>
+                      <span>{{ scope.row.title }}</span>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="create_time" label="上传日期" width="120">
+                  <template #default="scope">
+                    {{ formatReportDate(scope.row.create_time) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="file_size" label="大小" width="100">
+                  <template #default="scope">
+                    {{ formatReportFileSize(scope.row.file_size) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="150" fixed="right">
+                  <template #default="scope">
+                    <el-button size="small" @click="openEditReportDialog(scope.row)">编辑</el-button>
+                    <el-button size="small" type="danger" @click="deleteReportItem(scope.row.id)">删除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="batch-actions">
+                <el-button type="danger" @click="batchDeleteReports" :disabled="selectedReports.length === 0">
+                  批量删除 ({{ selectedReports.length }})
+                </el-button>
+                <el-pagination
+                  v-model:current-page="reportPage"
+                  :page-size="20"
+                  :total="reportTotal"
+                  layout="total, prev, pager, next"
+                  @current-change="loadReportList"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 添加/编辑设备用途对话框 -->
@@ -494,13 +729,116 @@
         </span>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="reportEditDialogVisible" width="500px" :show-close="false">
+      <template #header>
+        <div class="dialog-header">
+          <div class="header-decoration">
+            <span class="decoration-line"></span>
+            <span class="decoration-dot"></span>
+          </div>
+          <h3 class="dialog-title">编辑报告</h3>
+          <div class="header-decoration right">
+            <span class="decoration-dot"></span>
+            <span class="decoration-line"></span>
+          </div>
+          <button class="close-btn" @click="reportEditDialogVisible = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </template>
+      <el-form :model="reportEditForm" label-width="80px">
+        <el-form-item label="报告标题">
+          <el-input v-model="reportEditForm.title" placeholder="请输入报告标题" />
+        </el-form-item>
+        <el-form-item label="组织单位">
+          <el-tree-select
+            v-model="reportEditForm.org_id"
+            :data="organizationTree"
+            :props="{ label: 'name', value: 'id', children: 'children' }"
+            placeholder="选择组织单位"
+            filterable
+            check-strictly
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="reportEditDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveReportEdit" :loading="reportEditLoading">
+            保存
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="viewReportDialogVisible"
+      width="80%"
+      top="5vh"
+      :close-on-click-modal="false"
+      :fullscreen="isViewReportMaximized"
+      :show-close="false"
+      class="report-detail-dialog"
+      append-to-body
+      @closed="handleViewReportDialogClosed"
+    >
+      <template #header>
+        <div class="report-dialog-header">
+          <div class="header-left">
+            <div class="report-title">{{ viewReportData?.title || '报告详情' }}</div>
+            <div class="report-meta" v-if="viewReportData">
+              {{ viewReportData.org_name }} · {{ formatReportDate(viewReportData.create_time) }} · {{ formatReportFileSize(viewReportData.file_size) }}
+            </div>
+          </div>
+          <div class="header-right">
+            <button class="control-btn" @click="toggleViewReportMaximize" :title="isViewReportMaximized ? '还原' : '最大化'">
+              <svg v-if="!isViewReportMaximized" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+              </svg>
+            </button>
+            <button class="control-btn close-btn" @click="viewReportDialogVisible = false" title="关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </template>
+      
+      <div class="report-body-wrapper">
+        <div v-if="viewReportLoading" class="loading-container">
+          <el-icon class="is-loading" :size="32"><Loading /></el-icon>
+          <span>加载报告内容...</span>
+        </div>
+        
+        <div v-else-if="viewReportContent" class="markdown-content" v-html="renderedReportMarkdown"></div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="viewReportDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Download, Upload, Document, Loading } from '@element-plus/icons-vue'
 import axios from 'axios'
+import * as XLSX from 'xlsx'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import { exportApi, reportApi } from '../api'
 
 const activeTab = ref('system')
 
@@ -593,6 +931,94 @@ const dbTestLoading = ref(false)
 const connectionTest = ref({
   main_database: null,
   local_database: null
+})
+
+const exportDateRange = ref([])
+const exportLoading = ref(false)
+const exportProgress = ref({
+  show: false,
+  percent: 0,
+  status: '',
+  text: ''
+})
+const exportResult = ref({
+  total: 0,
+  data: []
+})
+
+const organizationList = ref([])
+const organizationTree = ref([])
+
+const buildOrgTree = (orgs) => {
+  const map = {}
+  const roots = []
+  
+  orgs.forEach(org => {
+    map[org.id] = { ...org, children: [] }
+  })
+  
+  orgs.forEach(org => {
+    const node = map[org.id]
+    if (org.parent_id === 0 || !map[org.parent_id]) {
+      roots.push(node)
+    } else {
+      map[org.parent_id].children.push(node)
+    }
+  })
+  
+  const sortChildren = (nodes) => {
+    nodes.sort((a, b) => (a.sort || 0) - (b.sort || 0))
+    nodes.forEach(node => {
+      if (node.children && node.children.length > 0) {
+        sortChildren(node.children)
+      }
+    })
+  }
+  
+  sortChildren(roots)
+  return roots
+}
+const reportList = ref([])
+const reportTotal = ref(0)
+const reportPage = ref(1)
+const reportFilterOrg = ref(null)
+const selectedReports = ref([])
+const uploadLoading = ref(false)
+const batchUploadLoading = ref(false)
+const reportEditDialogVisible = ref(false)
+const reportEditLoading = ref(false)
+const reportEditForm = ref({
+  id: null,
+  title: '',
+  org_id: null
+})
+const reportForm = ref({
+  org_id: null,
+  title: '',
+  file: null,
+  content: '',
+  file_size: 0
+})
+const batchReportForm = ref({
+  org_id: null,
+  files: []
+})
+
+const viewReportDialogVisible = ref(false)
+const viewReportLoading = ref(false)
+const viewReportContent = ref('')
+const viewReportData = ref(null)
+const isViewReportMaximized = ref(false)
+
+const renderedReportMarkdown = computed(() => {
+  if (!viewReportContent.value) return ''
+  try {
+    const rawHtml = marked(viewReportContent.value)
+    return DOMPurify.sanitize(rawHtml)
+  } catch (e) {
+    console.error('Markdown render error:', e)
+    return viewReportContent.value
+  }
 })
 
 const loadConfig = async () => {
@@ -1123,6 +1549,395 @@ const formatDateTime = (dateStr) => {
   return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`
 }
 
+const disabledExportDate = (time) => {
+  return time.getTime() > Date.now()
+}
+
+const handleExportData = async () => {
+  if (!exportDateRange.value || exportDateRange.value.length !== 2) {
+    ElMessage.warning('请选择日期范围')
+    return
+  }
+
+  const startDate = exportDateRange.value[0]
+  const endDate = exportDateRange.value[1]
+  const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1
+
+  if (daysDiff > 365) {
+    ElMessage.warning('日期范围不能超过365天')
+    return
+  }
+
+  const startDateStr = `${startDate.getFullYear()}-${(startDate.getMonth() + 1).toString().padStart(2, '0')}-${startDate.getDate().toString().padStart(2, '0')}`
+  const endDateStr = `${endDate.getFullYear()}-${(endDate.getMonth() + 1).toString().padStart(2, '0')}-${endDate.getDate().toString().padStart(2, '0')}`
+
+  exportLoading.value = true
+  exportProgress.value = {
+    show: true,
+    percent: 0,
+    status: '',
+    text: '正在获取数据...'
+  }
+  exportResult.value = { total: 0, data: [] }
+
+  try {
+    exportProgress.value.percent = 30
+    exportProgress.value.text = '正在从数据库查询数据...'
+    
+    const response = await exportApi.getUsageData(startDateStr, endDateStr)
+    
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '获取数据失败')
+    }
+
+    exportProgress.value.percent = 60
+    exportProgress.value.text = `获取到 ${response.total} 条数据，正在生成Excel...`
+
+    const data = response.data
+    exportResult.value = {
+      total: response.total,
+      data: data
+    }
+
+    exportProgress.value.percent = 80
+    exportProgress.value.text = '正在生成Excel文件...'
+
+    const headers = [
+      '起始日期', '结束日期', '实际起始日期', '实际结束日期', '组织机构名称', '设备数', 'GPU数', 
+      '总算力', '显存总量(GB)', '设备用途', '运行网络', '时间类型',
+      '平均GPU使用率(%)', '平均显存使用率(%)', '平均显存利用率(%)'
+    ]
+    
+    const wsData = [headers]
+    data.forEach(row => {
+      wsData.push([
+        row['起始日期'],
+        row['结束日期'],
+        row['实际起始日期'],
+        row['实际结束日期'],
+        row['组织机构名称'],
+        row['设备数'],
+        row['GPU数'],
+        row['总算力'],
+        row['显存总量(GB)'],
+        row['设备用途'],
+        row['运行网络'],
+        row['时间类型'],
+        row['平均GPU使用率(%)'],
+        row['平均显存使用率(%)'],
+        row['平均显存利用率(%)']
+      ])
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    
+    const colWidths = [
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 30 }, { wch: 10 }, { wch: 10 },
+      { wch: 12 }, { wch: 14 }, { wch: 15 }, { wch: 15 }, { wch: 12 },
+      { wch: 16 }, { wch: 16 }, { wch: 16 }
+    ]
+    ws['!cols'] = colWidths
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '使用率数据')
+
+    exportProgress.value.percent = 95
+    exportProgress.value.text = '正在下载文件...'
+
+    const fileName = `使用率数据导出_${startDateStr}_${endDateStr}.xlsx`
+    XLSX.writeFile(wb, fileName)
+
+    exportProgress.value.percent = 100
+    exportProgress.value.status = 'success'
+    exportProgress.value.text = '导出完成！'
+
+    ElMessage.success(`成功导出 ${response.total} 条数据`)
+
+    setTimeout(() => {
+      exportProgress.value.show = false
+    }, 2000)
+
+  } catch (error) {
+    console.error('导出失败:', error)
+    exportProgress.value.status = 'exception'
+    exportProgress.value.text = `导出失败: ${error.message || '未知错误'}`
+    ElMessage.error(error.response?.data?.detail || error.message || '导出失败')
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+const loadOrganizationList = async () => {
+  try {
+    const response = await reportApi.getOrganizations()
+    organizationList.value = response.data || []
+    organizationTree.value = buildOrgTree(response.data || [])
+  } catch (error) {
+    console.error('加载组织列表失败:', error)
+  }
+}
+
+const loadReportList = async () => {
+  try {
+    const params = { page: reportPage.value, page_size: 20 }
+    if (reportFilterOrg.value) {
+      params.org_id = reportFilterOrg.value
+    }
+    const response = await reportApi.getAdminReports(params)
+    reportList.value = response.data || []
+    reportTotal.value = response.total || 0
+  } catch (error) {
+    console.error('加载报告列表失败:', error)
+    ElMessage.error('加载报告列表失败')
+  }
+}
+
+const handleReportFileChange = (file) => {
+  const validTypes = ['.md', '.markdown']
+  const fileName = file.name.toLowerCase()
+  const isValidType = validTypes.some(ext => fileName.endsWith(ext))
+  
+  if (!isValidType) {
+    ElMessage.error('仅支持 .md 或 .markdown 文件')
+    return false
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error('文件大小不能超过 10MB')
+    return false
+  }
+  
+  reportForm.value.file = file.raw
+  reportForm.value.file_size = file.size
+  
+  if (!reportForm.value.title) {
+    const baseName = file.name.replace(/\.(md|markdown)$/i, '')
+    reportForm.value.title = baseName
+  }
+  
+  return true
+}
+
+const handleExceed = () => {
+  ElMessage.warning('一次只能上传一个文件')
+}
+
+const handleBatchReportFileChange = (file, fileList) => {
+  const validTypes = ['.md', '.markdown']
+  const fileName = file.name.toLowerCase()
+  const isValidType = validTypes.some(ext => fileName.endsWith(ext))
+  
+  if (!isValidType) {
+    ElMessage.error(`文件 ${file.name} 不是 Markdown 文件`)
+    return false
+  }
+  
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error(`文件 ${file.name} 超过 10MB`)
+    return false
+  }
+  
+  batchReportForm.value.files = fileList.map(f => ({
+    file: f.raw,
+    title: f.name.replace(/\.(md|markdown)$/i, ''),
+    file_size: f.size
+  }))
+  
+  return true
+}
+
+const handleBatchExceed = () => {
+  ElMessage.warning('一次最多上传20个文件')
+}
+
+const readFileContent = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => resolve(e.target.result)
+    reader.onerror = (e) => reject(e)
+    reader.readAsText(file)
+  })
+}
+
+const uploadReport = async () => {
+  if (!reportForm.value.org_id) {
+    ElMessage.warning('请选择组织单位')
+    return
+  }
+  if (!reportForm.value.title) {
+    ElMessage.warning('请输入报告标题')
+    return
+  }
+  if (!reportForm.value.file) {
+    ElMessage.warning('请选择文件')
+    return
+  }
+  
+  uploadLoading.value = true
+  try {
+    const content = await readFileContent(reportForm.value.file)
+    const org = organizationList.value.find(o => o.id === reportForm.value.org_id)
+    
+    await reportApi.createReport({
+      org_id: reportForm.value.org_id,
+      org_name: org?.name || '',
+      title: reportForm.value.title,
+      content: content,
+      file_size: reportForm.value.file_size
+    })
+    
+    ElMessage.success('报告上传成功')
+    reportForm.value = { org_id: null, title: '', file: null, content: '', file_size: 0 }
+    loadReportList()
+  } catch (error) {
+    console.error('上传失败:', error)
+    ElMessage.error(error.response?.data?.detail || '上传失败')
+  } finally {
+    uploadLoading.value = false
+  }
+}
+
+const batchUploadReports = async () => {
+  if (!batchReportForm.value.org_id) {
+    ElMessage.warning('请选择组织单位')
+    return
+  }
+  if (batchReportForm.value.files.length === 0) {
+    ElMessage.warning('请选择文件')
+    return
+  }
+  
+  batchUploadLoading.value = true
+  try {
+    const org = organizationList.value.find(o => o.id === batchReportForm.value.org_id)
+    let successCount = 0
+    let failCount = 0
+    
+    for (const item of batchReportForm.value.files) {
+      try {
+        const content = await readFileContent(item.file)
+        await reportApi.createReport({
+          org_id: batchReportForm.value.org_id,
+          org_name: org?.name || '',
+          title: item.title,
+          content: content,
+          file_size: item.file_size
+        })
+        successCount++
+      } catch (e) {
+        failCount++
+        console.error(`上传 ${item.title} 失败:`, e)
+      }
+    }
+    
+    if (successCount > 0) {
+      ElMessage.success(`成功上传 ${successCount} 个报告${failCount > 0 ? `，失败 ${failCount} 个` : ''}`)
+    } else {
+      ElMessage.error('所有报告上传失败')
+    }
+    
+    batchReportForm.value = { org_id: null, files: [] }
+    loadReportList()
+  } catch (error) {
+    console.error('批量上传失败:', error)
+    ElMessage.error('批量上传失败')
+  } finally {
+    batchUploadLoading.value = false
+  }
+}
+
+const handleReportSelection = (selection) => {
+  selectedReports.value = selection
+}
+
+const openEditReportDialog = (row) => {
+  reportEditForm.value = {
+    id: row.id,
+    title: row.title,
+    org_id: row.org_id
+  }
+  reportEditDialogVisible.value = true
+}
+
+const saveReportEdit = async () => {
+  if (!reportEditForm.value.title) {
+    ElMessage.warning('请输入报告标题')
+    return
+  }
+  if (!reportEditForm.value.org_id) {
+    ElMessage.warning('请选择组织单位')
+    return
+  }
+  
+  reportEditLoading.value = true
+  try {
+    const org = organizationList.value.find(o => o.id === reportEditForm.value.org_id)
+    await reportApi.updateReport(reportEditForm.value.id, {
+      title: reportEditForm.value.title,
+      org_id: reportEditForm.value.org_id,
+      org_name: org?.name || ''
+    })
+    ElMessage.success('报告更新成功')
+    reportEditDialogVisible.value = false
+    loadReportList()
+  } catch (error) {
+    console.error('更新失败:', error)
+    ElMessage.error(error.response?.data?.detail || '更新失败')
+  } finally {
+    reportEditLoading.value = false
+  }
+}
+
+const deleteReportItem = async (id) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这个报告吗？', '确认操作', { type: 'warning' })
+    await reportApi.deleteReport(id)
+    ElMessage.success('删除成功')
+    loadReportList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const batchDeleteReports = async () => {
+  if (selectedReports.value.length === 0) {
+    ElMessage.warning('请选择要删除的报告')
+    return
+  }
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedReports.value.length} 个报告吗？`,
+      '确认操作',
+      { type: 'warning' }
+    )
+    
+    const ids = selectedReports.value.map(r => r.id)
+    await reportApi.batchDeleteReports(ids)
+    ElMessage.success('批量删除成功')
+    selectedReports.value = []
+    loadReportList()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败')
+    }
+  }
+}
+
+const formatReportDate = (dateStr) => {
+  if (!dateStr) return '-'
+  return dateStr.split(' ')[0]
+}
+
+const formatReportFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '-'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
 onMounted(() => {
   loadConfig()
   loadAggregationStatus()
@@ -1131,6 +1946,8 @@ onMounted(() => {
   loadRecentTasks()
   checkRunningTask()
   refreshDatabaseStatus()
+  loadOrganizationList()
+  loadReportList()
 })
 
 const checkRunningTask = async () => {
@@ -1163,12 +1980,44 @@ const formatTaskTime = (timeStr) => {
   const date = new Date(timeStr)
   return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
+
+const viewReport = async (row) => {
+  viewReportData.value = row
+  viewReportDialogVisible.value = true
+  viewReportLoading.value = true
+  viewReportContent.value = ''
+  
+  try {
+    const data = await reportApi.getReportDetail(row.id)
+    if (data.error) {
+      viewReportContent.value = `# 加载失败\n\n${data.error}`
+    } else {
+      viewReportContent.value = data.content || '# 无内容'
+      viewReportData.value = { ...row, ...data }
+    }
+  } catch (error) {
+    console.error('Failed to fetch report detail:', error)
+    viewReportContent.value = '# 加载失败\n\n请稍后重试'
+  } finally {
+    viewReportLoading.value = false
+  }
+}
+
+const toggleViewReportMaximize = () => {
+  isViewReportMaximized.value = !isViewReportMaximized.value
+}
+
+const handleViewReportDialogClosed = () => {
+  viewReportData.value = null
+  viewReportContent.value = ''
+  isViewReportMaximized.value = false
+}
 </script>
 
 <style lang="scss" scoped>
 .admin-panel {
   padding: 20px;
-  max-height: 70vh;
+  height: 100%;
   overflow-y: auto;
 
   &::-webkit-scrollbar {
@@ -1866,5 +2715,411 @@ const formatTaskTime = (timeStr) => {
 
 .error-text {
   color: #f56c6c;
+}
+
+.export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  border: 1px solid var(--theme-border);
+
+  .export-date-range {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .export-label {
+      font-size: 14px;
+      color: var(--theme-text);
+      font-weight: 500;
+    }
+  }
+}
+
+.export-info {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+  border: 1px solid var(--theme-border);
+
+  .info-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--theme-primary);
+    margin-bottom: 10px;
+  }
+
+  .info-list {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--theme-text-secondary);
+    font-size: 13px;
+    line-height: 1.8;
+
+    li {
+      margin-bottom: 5px;
+    }
+  }
+}
+
+.export-progress {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--theme-border);
+
+  .progress-text {
+    display: block;
+    text-align: center;
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--theme-text-secondary);
+  }
+}
+
+.export-result {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid var(--theme-border);
+
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+
+    .result-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--theme-text);
+    }
+
+    .result-count {
+      font-size: 13px;
+      color: var(--theme-primary);
+    }
+  }
+
+  .result-hint {
+    text-align: center;
+    padding: 10px;
+    color: var(--theme-text-secondary);
+    font-size: 12px;
+    margin-top: 10px;
+    background: var(--theme-panel-bg);
+    border-radius: 4px;
+  }
+}
+
+.report-upload-section,
+.report-batch-section,
+.report-list-section {
+  background: var(--theme-hover-bg);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--theme-border);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.upload-form,
+.batch-form {
+  .form-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    
+    .form-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      
+      label {
+        font-size: 14px;
+        color: var(--theme-text);
+        white-space: nowrap;
+      }
+    }
+  }
+  
+  .upload-tip {
+    font-size: 12px;
+    color: var(--theme-text-secondary);
+    margin-top: 8px;
+  }
+}
+
+.ml-3 {
+  margin-left: 12px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.batch-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--theme-border);
+}
+
+.report-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .report-icon {
+    color: var(--theme-primary);
+  }
+  
+  &.clickable {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    
+    &:hover {
+      color: var(--theme-secondary);
+      
+      .report-icon {
+        color: var(--theme-secondary);
+      }
+    }
+  }
+}
+
+.report-detail-dialog {
+  :deep(.el-dialog__header) {
+    padding: 0;
+    margin: 0;
+  }
+  
+  :deep(.el-dialog__body) {
+    padding: 0;
+    max-height: calc(90vh - 120px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  :deep(.el-dialog__footer) {
+    padding: 12px 20px;
+    border-top: 1px solid var(--theme-border);
+  }
+}
+
+.report-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(90deg, 
+    var(--theme-hover-bg) 0%, 
+    var(--theme-shadow) 20%,
+    var(--theme-shadow) 80%,
+    var(--theme-hover-bg) 100%
+  );
+  border-bottom: 1px solid var(--theme-border);
+  
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    
+    .report-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--theme-primary);
+    }
+    
+    .report-meta {
+      font-size: 12px;
+      color: var(--theme-text-secondary);
+    }
+  }
+  
+  .header-right {
+    display: flex;
+    gap: 8px;
+    
+    .control-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
+      border: 1px solid var(--theme-border-heavy);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      
+      svg {
+        width: 16px;
+        height: 16px;
+        color: var(--theme-primary);
+      }
+      
+      &:hover {
+        border-color: var(--theme-primary);
+        box-shadow: 0 0 15px var(--theme-glow);
+      }
+      
+      &.close-btn:hover {
+        border-color: var(--theme-danger);
+        
+        svg {
+          color: var(--theme-danger);
+        }
+      }
+    }
+  }
+}
+
+.report-body-wrapper {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 40px;
+  color: var(--theme-text-secondary);
+  
+  .is-loading {
+    animation: rotate 1s linear infinite;
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.markdown-content {
+  padding: 24px;
+  line-height: 1.8;
+  color: var(--theme-text);
+  
+  :deep(h1), :deep(h2), :deep(h3), :deep(h4), :deep(h5), :deep(h6) {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    color: var(--theme-primary);
+  }
+  
+  :deep(h1) { font-size: 28px; border-bottom: 2px solid var(--theme-border); padding-bottom: 8px; }
+  :deep(h2) { font-size: 24px; }
+  :deep(h3) { font-size: 20px; }
+  :deep(h4) { font-size: 18px; }
+  :deep(h5) { font-size: 16px; }
+  :deep(h6) { font-size: 14px; }
+  
+  :deep(p) {
+    margin-bottom: 16px;
+    line-height: 1.8;
+  }
+  
+  :deep(ul), :deep(ol) {
+    margin-bottom: 16px;
+    padding-left: 24px;
+    
+    li {
+      margin-bottom: 8px;
+      line-height: 1.8;
+    }
+  }
+  
+  :deep(code) {
+    background: var(--theme-hover-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+  }
+  
+  :deep(pre) {
+    background: var(--theme-hover-bg);
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 16px;
+    
+    code {
+      background: none;
+      padding: 0;
+    }
+  }
+  
+  :deep(blockquote) {
+    border-left: 4px solid var(--theme-primary);
+    padding-left: 16px;
+    margin: 16px 0;
+    color: var(--theme-text-secondary);
+  }
+  
+  :deep(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    
+    th, td {
+      border: 1px solid var(--theme-border);
+      padding: 12px;
+      text-align: left;
+    }
+    
+    th {
+      background: var(--theme-hover-bg);
+      font-weight: 600;
+    }
+  }
+  
+  :deep(hr) {
+    border: none;
+    border-top: 1px solid var(--theme-border);
+    margin: 24px 0;
+  }
+  
+  :deep(img) {
+    max-width: 100%;
+    height: auto;
+  }
+  
+  :deep(a) {
+    color: var(--theme-primary);
+    text-decoration: none;
+    
+    &:hover {
+      text-decoration: underline;
+    }
+  }
 }
 </style>

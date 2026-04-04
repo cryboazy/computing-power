@@ -348,6 +348,25 @@ body {
   }
 }
 
+.el-dialog.admin-dialog {
+  .el-dialog__header {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  
+  .el-dialog__body {
+    height: calc(90vh - 80px) !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+  }
+  
+  &.is-fullscreen {
+    .el-dialog__body {
+      height: calc(100vh - 80px) !important;
+    }
+  }
+}
+
 .el-button--primary {
   --el-button-bg-color: var(--theme-primary) !important;
   --el-button-border-color: var(--theme-primary) !important;

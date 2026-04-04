@@ -1,8 +1,12 @@
+import logging
 from datetime import date, timedelta, datetime
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_, case
+from sqlalchemy import func, and_, or_
 from sqlalchemy.sql import text
+from sqlalchemy.exc import SQLAlchemyError
+
+logger = logging.getLogger(__name__)
 from app.database import SessionLocal
 from app.local_database import LocalSessionLocal
 from app.models import (
@@ -684,6 +688,174 @@ class DataAggregator:
         self.local_db.commit()
         print(f"组织小时数据汇总完成: {target_date}")
     
+    def get_export_data(self, start_date: date, end_date: date) -> List[Dict[str, Any]]:
+        from app.local_models import LocalOrganization, LocalPurposeDict, LocalNetwork
+        from app.models import Device
+        from sqlalchemy import distinct, func as sql_func
+        
+        results = []
+        
+        try:
+            logger.info(f"开始导出数据，日期范围: {start_date} 至 {end_date}")
+            
+            orgs = self.local_db.query(LocalOrganization).filter(
+                LocalOrganization.deleted == 0
+            ).all()
+            
+            purposes = self.local_db.query(LocalPurposeDict).filter(
+                LocalPurposeDict.dict_type == "device_purpose",
+                LocalPurposeDict.status == 1,
+                LocalPurposeDict.deleted == 0
+            ).order_by(LocalPurposeDict.dict_sort).all()
+            
+            purpose_dict = {p.dict_value: p.dict_label for p in purposes}
+            
+            networks = self.local_db.query(LocalNetwork).filter(
+                LocalNetwork.deleted == 0
+            ).all()
+            network_names = [n.name for n in networks if n.name]
+            
+            devices = self.db.query(Device).filter(Device.deleted == 0).all()
+            
+            gpu_infos = {g.gpu_name: g for g in self.db.query(GpuCardInfo).filter(GpuCardInfo.deleted == 0).all()}
+            
+            org_devices = {}
+            for device in devices:
+                org_id = device.organization_id
+                if org_id not in org_devices:
+                    org_devices[org_id] = []
+                org_devices[org_id].append(device)
+            
+            start_datetime = datetime.combine(start_date, datetime.min.time())
+            end_datetime = datetime.combine(end_date, datetime.max.time())
+            
+            for org in orgs:
+                org_id = org.id
+                org_name = org.name or ""
+                
+                org_device_list = org_devices.get(org_id, [])
+                if not org_device_list:
+                    continue
+                
+                device_ids = [d.id for d in org_device_list]
+                
+                all_summaries = self.local_db.query(LocalOrgGpuUsageSummary).filter(
+                    LocalOrgGpuUsageSummary.organization_id3 == org_id,
+                    LocalOrgGpuUsageSummary.summary_time >= start_datetime,
+                    LocalOrgGpuUsageSummary.summary_time <= end_datetime
+                ).order_by(LocalOrgGpuUsageSummary.summary_time).all()
+                
+                if not all_summaries:
+                    continue
+                
+                summary_dates = [s.summary_time.date() if isinstance(s.summary_time, datetime) else s.summary_time for s in all_summaries]
+                actual_start_date = min(summary_dates)
+                actual_end_date = max(summary_dates)
+                
+                last_day_summary = None
+                for summary in reversed(all_summaries):
+                    summary_date = summary.summary_time.date() if isinstance(summary.summary_time, datetime) else summary.summary_time
+                    if summary_date == actual_end_date:
+                        last_day_summary = summary
+                        break
+                
+                static_device_count = last_day_summary.device_count if last_day_summary else 0
+                static_gpu_count = last_day_summary.gpu_count if last_day_summary else 0
+                
+                total_tflops = 0
+                total_memory_gb = 0
+                for device in org_device_list:
+                    gpu_model = device.gpu_model or ""
+                    gpu_count = device.gpu_count or 0
+                    gpu_info = gpu_infos.get(gpu_model)
+                    if gpu_info and gpu_info.tflops_fp16:
+                        total_tflops += float(gpu_info.tflops_fp16) * gpu_count
+                    if device.total_memory:
+                        total_memory_gb += float(device.total_memory)
+                
+                purpose_network_combinations = []
+                purpose_values = [None] + [p.dict_value for p in purposes]
+                network_values = [None] + network_names
+                time_types = ['all', 'work', 'nonwork']
+                
+                for purpose_val in purpose_values:
+                    for network_val in network_values:
+                        for time_type in time_types:
+                            purpose_network_combinations.append((purpose_val, network_val, time_type))
+                
+                for purpose_val, network_val, time_type in purpose_network_combinations:
+                    filtered_devices = org_device_list
+                    if purpose_val is not None:
+                        filtered_devices = [d for d in filtered_devices if d.purpose == purpose_val]
+                    if network_val is not None:
+                        filtered_devices = [d for d in filtered_devices if d.net_module_name == network_val]
+                    
+                    if not filtered_devices:
+                        continue
+                    
+                    filtered_device_ids = [d.id for d in filtered_devices]
+                    
+                    summaries = all_summaries
+                    
+                    if not summaries:
+                        continue
+                    
+                    gpu_usage_values = []
+                    memory_usage_values = []
+                    memory_utilization_values = []
+                    
+                    for summary in summaries:
+                        if time_type == 'all':
+                            gpu_usage = summary.avg_gpu_usage_rate
+                        elif time_type == 'work':
+                            gpu_usage = summary.avg_gpu_usage_rate_work
+                        else:
+                            gpu_usage = summary.avg_gpu_usage_rate_nonwork
+                        
+                        if gpu_usage is not None:
+                            gpu_usage_values.append(float(gpu_usage))
+                        if summary.avg_memory_usage_rate is not None:
+                            memory_usage_values.append(float(summary.avg_memory_usage_rate))
+                        if summary.avg_memory_utilization is not None:
+                            memory_utilization_values.append(float(summary.avg_memory_utilization))
+                    
+                    avg_gpu_usage = round(sum(gpu_usage_values) / len(gpu_usage_values), 2) if gpu_usage_values else 0
+                    avg_memory_usage = round(sum(memory_usage_values) / len(memory_usage_values), 2) if memory_usage_values else 0
+                    avg_memory_utilization = round(sum(memory_utilization_values) / len(memory_utilization_values), 2) if memory_utilization_values else 0
+                    
+                    purpose_label = purpose_dict.get(purpose_val, "全部") if purpose_val is not None else "全部"
+                    network_label = network_val if network_val is not None else "全部"
+                    time_type_label = {'all': '全部', 'work': '工作时段', 'nonwork': '非工作时段'}.get(time_type, time_type)
+                    
+                    row = {
+                        '起始日期': start_date.strftime('%Y-%m-%d'),
+                        '结束日期': end_date.strftime('%Y-%m-%d'),
+                        '实际起始日期': actual_start_date.strftime('%Y-%m-%d'),
+                        '实际结束日期': actual_end_date.strftime('%Y-%m-%d'),
+                        '组织机构名称': org_name,
+                        '设备数': static_device_count,
+                        'GPU数': static_gpu_count,
+                        '总算力': round(total_tflops, 2),
+                        '显存总量(GB)': round(total_memory_gb, 2),
+                        '设备用途': purpose_label,
+                        '运行网络': network_label,
+                        '时间类型': time_type_label,
+                        '平均GPU使用率(%)': avg_gpu_usage,
+                        '平均显存使用率(%)': avg_memory_usage,
+                        '平均显存利用率(%)': avg_memory_utilization
+                    }
+                    results.append(row)
+            
+            logger.info(f"导出数据完成，共 {len(results)} 条记录")
+            return results
+            
+        except SQLAlchemyError as e:
+            logger.error(f"数据库查询错误，日期范围: {start_date} 至 {end_date}, 错误: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"导出数据时发生未知错误，日期范围: {start_date} 至 {end_date}, 错误: {str(e)}")
+            raise
+
     def run_all_aggregations(self, target_date: Optional[date] = None):
         print(f"开始执行数据聚合：{target_date or date.today() - timedelta(days=1)}")
         self.aggregate_daily_summary(target_date)

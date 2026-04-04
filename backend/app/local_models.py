@@ -401,3 +401,22 @@ class LocalAggregationTask(LocalBase):
         Index('idx_task_status', 'status'),
         Index('idx_task_create_time', 'create_time'),
     )
+
+
+class LocalAnalysisReport(LocalBase):
+    __tablename__ = "analysis_report"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    org_id = Column(BigInteger, nullable=False)
+    org_name = Column(String(200), nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    file_size = Column(Integer, default=0)
+    status = Column(SmallInteger, default=1)
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    
+    __table_args__ = (
+        Index('idx_report_org_id', 'org_id'),
+        Index('idx_report_create_time', 'create_time'),
+    )

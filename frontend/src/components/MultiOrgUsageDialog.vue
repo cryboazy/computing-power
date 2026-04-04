@@ -4,7 +4,7 @@
       <div class="loading-spinner"></div>
       <span>加载中...</span>
     </div>
-    
+
     <template v-else>
       <div v-if="panelType === 'left'" class="expand-panel">
         <div v-if="subType === 'combined'" class="chart-section">
@@ -26,7 +26,7 @@
           <v-chart :option="warningBarOption" autoresize @click="handleExpandWarningBarClick" />
         </div>
       </div>
-      
+
       <div v-else-if="panelType === 'center'" class="expand-panel">
         <div v-if="subType === 'orgType'" class="dual-pie-section">
           <div class="pie-container">
@@ -53,21 +53,16 @@
           <div class="filter-bar">
             <div class="filter-item">
               <label>单位类型</label>
-              <el-select v-model="carouselOrgType" placeholder="全部" clearable size="small" @change="handleCarouselFilter">
+              <el-select v-model="carouselOrgType" placeholder="全部" clearable size="small"
+                @change="handleCarouselFilter">
                 <el-option label="部机关" value="central" />
                 <el-option label="地方厅局" value="local" />
               </el-select>
             </div>
             <div class="filter-item">
               <label>单位名称</label>
-              <el-input
-                v-model="carouselOrgName"
-                placeholder="请输入单位名称"
-                size="small"
-                clearable
-                @keyup.enter="handleCarouselFilter"
-                @clear="handleCarouselFilter"
-              >
+              <el-input v-model="carouselOrgName" placeholder="请输入单位名称" size="small" clearable
+                @keyup.enter="handleCarouselFilter" @clear="handleCarouselFilter">
                 <template #append>
                   <el-button icon="Search" @click="handleCarouselFilter" />
                 </template>
@@ -75,55 +70,40 @@
             </div>
             <div class="filter-item">
               <label>运行网络</label>
-              <el-select v-model="carouselNetwork" placeholder="全部网络" clearable size="small" @change="handleCarouselFilter">
-                <el-option
-                  v-for="network in networkList"
-                  :key="network.code"
-                  :label="network.name"
-                  :value="network.code"
-                />
+              <el-select v-model="carouselNetwork" placeholder="全部网络" clearable size="small"
+                @change="handleCarouselFilter">
+                <el-option v-for="network in networkList" :key="network.code" :label="network.name"
+                  :value="network.code" />
               </el-select>
             </div>
             <div class="filter-item">
               <label>设备用途</label>
-              <el-select v-model="carouselPurpose" placeholder="全部用途" clearable size="small" @change="handleCarouselFilter">
-                <el-option
-                  v-for="purpose in purposeList"
-                  :key="purpose.dict_value"
-                  :label="purpose.dict_label"
-                  :value="String(purpose.dict_value)"
-                />
+              <el-select v-model="carouselPurpose" placeholder="全部用途" clearable size="small"
+                @change="handleCarouselFilter">
+                <el-option v-for="purpose in purposeList" :key="purpose.dict_value" :label="purpose.dict_label"
+                  :value="String(purpose.dict_value)" />
               </el-select>
             </div>
             <div class="filter-item">
               <label>时间类型</label>
-              <el-radio-group v-model="carouselTimeType" size="small" @change="handleCarouselFilter">
-                <el-radio-button value="work">工作时间</el-radio-button>
-                <el-radio-button value="nonwork">非工作时间</el-radio-button>
-                <el-radio-button value="all">全部</el-radio-button>
-              </el-radio-group>
+              <el-select v-model="carouselTimeType" placeholder="全部" size="small" @change="handleCarouselFilter">
+                <el-option label="工作时间" value="work" />
+                <el-option label="非工作时间" value="nonwork" />
+                <el-option label="全部" value="all" />
+              </el-select>
             </div>
             <div class="filter-item">
-              <label>时间粒度</label>
+              <label>时间段</label>
+              <el-date-picker v-model="carouselDateRange" type="daterange" range-separator="至" start-placeholder="开始日期"
+                end-placeholder="结束日期" size="small" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
+                @change="handleDateRangeChange" />
+            </div>
+            <div class="filter-item">
               <el-radio-group v-model="carouselTimeGrain" size="small" @change="handleTimeGrainChange">
                 <el-radio-button value="day">日</el-radio-button>
                 <el-radio-button value="week">周</el-radio-button>
                 <el-radio-button value="month">月</el-radio-button>
               </el-radio-group>
-            </div>
-            <div class="filter-item">
-              <label>时间段</label>
-              <el-date-picker
-                v-model="carouselDateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                size="small"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
-                @change="handleDateRangeChange"
-              />
             </div>
           </div>
           <div class="carousel-grid-wrapper">
@@ -138,26 +118,15 @@
             <div v-else class="carousel-grid">
               <div v-for="(item, index) in carouselData" :key="index" class="carousel-item">
                 <div class="carousel-title" @click="handleExpandCarouselTitleClick(item)">{{ item.org_name }}</div>
-                <v-chart
-                  :option="getCarouselOption(item.trend)"
-                  autoresize
-                  @click="(params) => handleChartClick(params, item.org_name, item.org_id)"
-                />
+                <v-chart :option="getCarouselOption(item.trend)" autoresize
+                  @click="(params) => handleChartClick(params, item.org_name, item.org_id)" />
               </div>
             </div>
           </div>
-          
-          <el-dialog
-            v-model="drillDialogVisible"
-            :title="`${drillOrgName} - ${drillDate} 使用率详情`"
-            width="900px"
-            :close-on-click-modal="false"
-            class="drill-dialog"
-            destroy-on-close
-            top="8vh"
-            append-to-body
-            :show-close="false"
-          >
+
+          <el-dialog v-model="drillDialogVisible" :title="`${drillOrgName} - ${drillDate} 使用率详情`" width="900px"
+            :close-on-click-modal="false" class="drill-dialog" destroy-on-close top="8vh" append-to-body
+            :show-close="false">
             <template #header>
               <div class="drill-dialog-header">
                 <span class="drill-title">{{ drillOrgName }} - {{ drillDate }} 使用率详情</span>
@@ -180,22 +149,16 @@
           </el-dialog>
         </div>
       </div>
-      
+
       <div v-else-if="panelType === 'right'" class="expand-panel">
         <div v-if="subType === 'all'" class="ranking-table-section">
           <div class="table-header">
             <h3>全国排名</h3>
             <span class="total-count">共 {{ allRanking.length }} 个单位</span>
           </div>
-          <el-table 
-            :data="sortedAllRanking" 
-            stripe 
-            style="width: 100%"
-            :header-cell-style="tableHeaderStyle"
-            :cell-style="tableCellStyle"
-            @sort-change="handleSortChange('all', $event)"
-            @row-click="handleExpandRankingRowClick"
-          >
+          <el-table :data="sortedAllRanking" stripe style="width: 100%" :header-cell-style="tableHeaderStyle"
+            :cell-style="tableCellStyle" @sort-change="handleSortChange('all', $event)"
+            @row-click="handleExpandRankingRowClick">
             <el-table-column prop="rank" label="排名" width="80" fixed="left" sortable>
               <template #default="{ row }">
                 <span :class="['rank-badge', `rank-${row.rank}`]">{{ row.rank }}</span>
@@ -243,7 +206,20 @@
             </el-table-column>
             <el-table-column prop="avg_gpu_usage" label="GPU使用率" width="130" sortable>
               <template #default="{ row }">
-                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ formatNumber(row.avg_gpu_usage, 2) }}%</span>
+                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{
+                  formatNumber(row.avg_gpu_usage, 2) }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avg_memory_usage_rate" label="显存使用率" width="130" sortable>
+              <template #default="{ row }">
+                <span class="value-cell memory-usage" :style="{ color: getUsageColor(row.avg_memory_usage_rate) }">{{
+                  formatNumber(row.avg_memory_usage_rate, 2) }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avg_memory_utilization" label="显存利用率" width="130" sortable>
+              <template #default="{ row }">
+                <span class="value-cell memory-util" :style="{ color: getUsageColor(row.avg_memory_utilization) }">{{
+                  formatNumber(row.avg_memory_utilization, 2) }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -253,15 +229,9 @@
             <h3>{{ groupName }}排名</h3>
             <span class="total-count">共 {{ groupRanking.length }} 个单位</span>
           </div>
-          <el-table 
-            :data="sortedGroupRanking" 
-            stripe 
-            style="width: 100%"
-            :header-cell-style="tableHeaderStyle"
-            :cell-style="tableCellStyle"
-            @sort-change="handleSortChange('group', $event)"
-            @row-click="handleExpandRankingRowClick"
-          >
+          <el-table :data="sortedGroupRanking" stripe style="width: 100%" :header-cell-style="tableHeaderStyle"
+            :cell-style="tableCellStyle" @sort-change="handleSortChange('group', $event)"
+            @row-click="handleExpandRankingRowClick">
             <el-table-column prop="rank" label="排名" width="80" fixed="left" sortable>
               <template #default="{ row }">
                 <span :class="['rank-badge', `rank-${row.rank}`]">{{ row.rank }}</span>
@@ -309,7 +279,20 @@
             </el-table-column>
             <el-table-column prop="avg_gpu_usage" label="GPU使用率" width="130" sortable>
               <template #default="{ row }">
-                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ formatNumber(row.avg_gpu_usage, 2) }}%</span>
+                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{
+                  formatNumber(row.avg_gpu_usage, 2) }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avg_memory_usage_rate" label="显存使用率" width="130" sortable>
+              <template #default="{ row }">
+                <span class="value-cell memory-usage" :style="{ color: getUsageColor(row.avg_memory_usage_rate) }">{{
+                  formatNumber(row.avg_memory_usage_rate, 2) }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avg_memory_utilization" label="显存利用率" width="130" sortable>
+              <template #default="{ row }">
+                <span class="value-cell memory-util" :style="{ color: getUsageColor(row.avg_memory_utilization) }">{{
+                  formatNumber(row.avg_memory_utilization, 2) }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -319,15 +302,9 @@
             <h3>{{ provinceName }}组织机构列表</h3>
             <span class="total-count">共 {{ provinceRanking.length }} 个单位</span>
           </div>
-          <el-table 
-            :data="sortedProvinceRanking" 
-            stripe 
-            style="width: 100%"
-            :header-cell-style="tableHeaderStyle"
-            :cell-style="tableCellStyle"
-            @sort-change="handleSortChange('province', $event)"
-            @row-click="handleExpandRankingRowClick"
-          >
+          <el-table :data="sortedProvinceRanking" stripe style="width: 100%" :header-cell-style="tableHeaderStyle"
+            :cell-style="tableCellStyle" @sort-change="handleSortChange('province', $event)"
+            @row-click="handleExpandRankingRowClick">
             <el-table-column prop="rank" label="排名" width="80" fixed="left" sortable>
               <template #default="{ row }">
                 <span :class="['rank-badge', `rank-${row.rank}`]">{{ row.rank }}</span>
@@ -375,7 +352,20 @@
             </el-table-column>
             <el-table-column prop="avg_gpu_usage" label="GPU使用率" width="130" sortable>
               <template #default="{ row }">
-                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{ formatNumber(row.avg_gpu_usage, 2) }}%</span>
+                <span class="value-cell usage" :style="{ color: getUsageColor(row.avg_gpu_usage) }">{{
+                  formatNumber(row.avg_gpu_usage, 2) }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avg_memory_usage_rate" label="显存使用率" width="130" sortable>
+              <template #default="{ row }">
+                <span class="value-cell memory-usage" :style="{ color: getUsageColor(row.avg_memory_usage_rate) }">{{
+                  formatNumber(row.avg_memory_usage_rate, 2) }}%</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="avg_memory_utilization" label="显存利用率" width="130" sortable>
+              <template #default="{ row }">
+                <span class="value-cell memory-util" :style="{ color: getUsageColor(row.avg_memory_utilization) }">{{
+                  formatNumber(row.avg_memory_utilization, 2) }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -394,8 +384,7 @@ import { LineChart, BarChart, PieChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { dashboardApi } from '../api'
 import { useTheme } from '../composables/useTheme'
-import { getTierNames, getTierKeys, TIER_COLORS } from '../utils/gpuTierUtils'
-import { loadTierList, getTierConfigForChart } from '../store/gpuTierStore'
+import { loadTierList, getTierConfigForChart, getTierColors } from '../store/gpuTierStore'
 
 use([
   CanvasRenderer,
@@ -551,12 +540,12 @@ const tableCellStyle = {
   borderBottom: '1px solid rgba(0, 180, 255, 0.1)'
 }
 
-const formatMemory = (mb) => {
-  if (!mb || mb === 0) return '0 GB'
-  if (mb >= 1024) {
-    return (mb / 1024).toFixed(2) + ' TB'
+const formatMemory = (gb) => {
+  if (!gb || gb === 0) return '0 GB'
+  if (gb >= 1024) {
+    return (gb / 1024).toFixed(2) + ' TB'
   }
-  return mb.toFixed(2) + ' GB'
+  return Math.round(gb) + ' GB'
 }
 
 const formatCompute = (tflops) => {
@@ -590,22 +579,22 @@ const formatNumber = (num, decimals = 0) => {
 
 const sortData = (data, sortConfig) => {
   if (!sortConfig || !sortConfig.prop) return data
-  
+
   const { prop, order } = sortConfig
   const sorted = [...data].sort((a, b) => {
     let aVal = a[prop]
     let bVal = b[prop]
-    
+
     if (typeof aVal === 'string') {
       aVal = aVal.toLowerCase()
       bVal = bVal.toLowerCase()
     }
-    
+
     if (aVal < bVal) return order === 'ascending' ? -1 : 1
     if (aVal > bVal) return order === 'ascending' ? 1 : -1
     return 0
   })
-  
+
   return sorted
 }
 
@@ -672,7 +661,7 @@ const deviceCountOption = computed(() => ({
 
 const combinedTrendOption = computed(() => {
   const dates = deviceCountData.value.map(d => d.date)
-  
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -682,10 +671,22 @@ const combinedTrendOption = computed(() => {
       formatter: (params) => {
         let result = params[0].axisValue + '<br/>'
         params.forEach(param => {
-          const unit = param.seriesName.includes('设备') ? '台' : 
-                       param.seriesName.includes('显存') ? 'GB' : 
-                       param.seriesName.includes('算力') ? 'PF' : ''
-          result += `${param.marker} ${param.seriesName}: ${param.value}${unit}<br/>`
+          let unit = ''
+          let value = param.value
+          if (param.seriesName.includes('设备')) {
+            unit = '台'
+          } else if (param.seriesName.includes('显存')) {
+            if (value >= 1024) {
+              value = (value / 1024).toFixed(2)
+              unit = 'TB'
+            } else {
+              value = Math.round(value)
+              unit = 'GB'
+            }
+          } else if (param.seriesName.includes('算力')) {
+            unit = 'PF'
+          }
+          result += `${param.marker} ${param.seriesName}: ${value}${unit}<br/>`
         })
         return result
       }
@@ -901,8 +902,8 @@ const warningBarOption = computed(() => ({
     type: 'category',
     data: warningData.value.map(d => d.org_name),
     axisLine: { lineStyle: { color: 'rgba(0, 180, 255, 0.3)' } },
-    axisLabel: { 
-      color: 'rgba(255, 255, 255, 0.7)', 
+    axisLabel: {
+      color: 'rgba(255, 255, 255, 0.7)',
       fontSize: 11,
       rotate: 30
     },
@@ -994,9 +995,9 @@ const localPieOption = computed(() => createPieOption(
 const networkOption = computed(() => {
   const orgNames = networkByOrgData.value.data.map(d => d.org_name)
   const networks = networkByOrgData.value.networks
-  
+
   const colors = ['#00b4ff', '#00ffcc', '#e6a23c', '#f56c6c', '#67c23a', '#9b59b6', '#3498db', '#1abc9c']
-  
+
   const series = networks.map((network, index) => ({
     name: network,
     type: 'bar',
@@ -1010,7 +1011,7 @@ const networkOption = computed(() => {
     },
     data: networkByOrgData.value.data.map(org => org.networks[network] || 0)
   }))
-  
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -1052,12 +1053,13 @@ const networkOption = computed(() => {
 
 const gpuTierOption = computed(() => {
   const orgNames = gpuTierByOrgData.value.map(d => d.org_name)
-  
-  const tierConfig = getTierConfigForChart()
-  const colors = Object.values(TIER_COLORS)
+
+  const themeColors = getAllColors()
+  const tierConfig = getTierConfigForChart(themeColors)
+  const colors = tierConfig.colors
   const tierNames = tierConfig.names
   const tierKeys = tierConfig.keys
-  
+
   const series = tierNames.map((name, index) => ({
     name: name,
     type: 'line',
@@ -1077,7 +1079,7 @@ const gpuTierOption = computed(() => {
     },
     data: gpuTierByOrgData.value.map(d => d[tierKeys[index]])
   }))
-  
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -1108,8 +1110,8 @@ const gpuTierOption = computed(() => {
       boundaryGap: false,
       data: orgNames.map(name => name.length > 8 ? name.substring(0, 8) + '...' : name),
       axisLine: { lineStyle: { color: 'rgba(0, 180, 255, 0.3)' } },
-      axisLabel: { 
-        color: 'rgba(255, 255, 255, 0.7)', 
+      axisLabel: {
+        color: 'rgba(255, 255, 255, 0.7)',
         fontSize: 10,
         rotate: 30
       }
@@ -1127,9 +1129,9 @@ const gpuTierOption = computed(() => {
 const purposeOption = computed(() => {
   const orgNames = purposeByOrgData.value.data.map(d => d.org_name)
   const purposes = purposeByOrgData.value.purposes
-  
+
   const colors = ['#00b4ff', '#00ffcc', '#e6a23c']
-  
+
   const series = purposes.map((purpose, index) => ({
     name: purpose,
     type: 'bar',
@@ -1143,7 +1145,7 @@ const purposeOption = computed(() => {
     },
     data: purposeByOrgData.value.data.map(org => org.purposes[purpose] || 0)
   }))
-  
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -1288,7 +1290,7 @@ const drillChartOption = computed(() => {
   const primaryColor = colors.primary
   const borderColor = colors.border
   const textSecondary = colors.textSecondary
-  
+
   const hexToRgba = (hex, alpha) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
     if (result) {
@@ -1296,13 +1298,13 @@ const drillChartOption = computed(() => {
     }
     return hex
   }
-  
+
   const areaColorStart = hexToRgba(primaryColor, 0.3)
   const areaColorEnd = hexToRgba(primaryColor, 0.05)
   const splitLineColor = borderColor.includes('rgba')
     ? borderColor.replace(/[\d.]+\)$/, '0.1)')
     : hexToRgba(primaryColor, 0.1)
-  
+
   return {
     tooltip: {
       trigger: 'axis',
@@ -1413,8 +1415,6 @@ const fetchCenterPanelData = async () => {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : getStartDateFromRange(props.timeRange)
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
     const timeGrain = carouselDateRange.value ? carouselTimeGrain.value : getTimeGrainFromRange(props.timeRange)
-    console.log('[Carousel] Using timeRange:', props.timeRange, 'startDate:', startDate, 'timeGrain:', timeGrain)
-    console.log('[Carousel] Fetching data with timeType:', carouselTimeType.value, 'orgType:', carouselOrgType.value, 'timeGrain:', timeGrain)
     const [orgType, networkByOrg, gpuTierByOrg, purposeByOrg, carousel] = await Promise.all([
       dashboardApi.getOrgTypeDistribution(),
       dashboardApi.getNetworkDistributionByOrg(),
@@ -1422,12 +1422,11 @@ const fetchCenterPanelData = async () => {
       dashboardApi.getPurposeDistributionByOrg(),
       dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, timeGrain, startDate, endDate, null, null, carouselNetwork.value || null, carouselPurpose.value || null)
     ])
-    
+
     orgTypeData.value = orgType
     networkByOrgData.value = networkByOrg
     gpuTierByOrgData.value = gpuTierByOrg
     purposeByOrgData.value = purposeByOrg
-    console.log('[Carousel] Received data:', carousel, 'length:', Array.isArray(carousel) ? carousel.length : 'not array')
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to fetch center panel data:', error)
@@ -1439,9 +1438,7 @@ const handleCarouselFilter = async () => {
   try {
     const startDate = carouselDateRange.value ? carouselDateRange.value[0] : null
     const endDate = carouselDateRange.value ? carouselDateRange.value[1] : null
-    console.log('[Carousel Filter] timeType:', carouselTimeType.value)
     const carousel = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, carouselOrgType.value || null, carouselOrgName.value || null, carouselTimeGrain.value, startDate, endDate, null, null, carouselNetwork.value || null, carouselPurpose.value || null)
-    console.log('[Carousel Filter] Received:', carousel)
     carouselData.value = carousel
   } catch (error) {
     console.error('Failed to filter carousel data:', error)
@@ -1488,7 +1485,7 @@ const handleChartClick = async (params, orgName, orgId) => {
       drillTrendData.value = []
       drillLoading.value = true
       drillDialogVisible.value = true
-      
+
       try {
         const result = await dashboardApi.getCarouselUsageTrend(carouselTimeType.value, null, null, 'day', null, null, clickedDate, orgId)
         drillTrendData.value = result.trend || []
@@ -1608,7 +1605,6 @@ watch(
 // 监听时间类型变化，重新获取数据
 watch(carouselTimeType, (newVal, oldVal) => {
   if (oldVal !== undefined && newVal !== oldVal) {
-    console.log('[Carousel] Time type changed:', oldVal, '->', newVal)
     handleCarouselFilter()
   }
 })
@@ -1627,7 +1623,7 @@ onMounted(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  
+
   .loading-container {
     display: flex;
     flex-direction: column;
@@ -1636,7 +1632,7 @@ onMounted(() => {
     flex: 1;
     min-height: 300px;
     color: var(--theme-text-secondary);
-    
+
     .loading-spinner {
       width: 40px;
       height: 40px;
@@ -1647,44 +1643,44 @@ onMounted(() => {
       margin-bottom: 15px;
     }
   }
-  
+
   .expand-panel {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
   }
-  
+
   .chart-section {
     flex: 1;
     min-height: 500px;
     display: flex;
     flex-direction: column;
-    
+
     :deep(.echarts) {
       width: 100%;
       height: 100%;
       min-height: 400px;
     }
   }
-  
+
   .dual-pie-section {
     flex: 1;
     min-height: 500px;
     display: flex;
     flex-direction: column;
-    
+
     .pie-container {
       display: flex;
       flex: 1;
       gap: 20px;
-      
+
       .pie-wrapper {
         flex: 1;
         display: flex;
         flex-direction: column;
         min-height: 400px;
-        
+
         .pie-label {
           font-size: 14px;
           color: var(--theme-primary);
@@ -1692,7 +1688,7 @@ onMounted(() => {
           padding: 10px 0;
           flex-shrink: 0;
         }
-        
+
         :deep(.echarts) {
           flex: 1;
           min-height: 350px;
@@ -1700,13 +1696,13 @@ onMounted(() => {
       }
     }
   }
-  
+
   .carousel-section {
     flex: 1;
     min-height: 500px;
     display: flex;
     flex-direction: column;
-    
+
     .filter-bar {
       display: flex;
       gap: 20px;
@@ -1715,64 +1711,64 @@ onMounted(() => {
       margin-bottom: 15px;
       flex-shrink: 0;
       flex-wrap: wrap;
-      
+
       .filter-item {
         display: flex;
         align-items: center;
         gap: 10px;
-        
+
         label {
           color: var(--theme-text-secondary);
           font-size: 14px;
           white-space: nowrap;
         }
-        
+
         :deep(.el-select) {
           width: 100px;
-          
+
           .el-input__wrapper {
             background: var(--theme-input-bg);
             border: 1px solid var(--theme-border);
             box-shadow: none;
-            
+
             .el-input__inner {
               color: var(--theme-text);
             }
           }
         }
-        
+
         :deep(.el-input) {
-          width: 250px;
-          
+          width: 150px;
+
           .el-input__wrapper {
             background: var(--theme-input-bg);
             border: 1px solid var(--theme-border);
             box-shadow: none;
-            
+
             .el-input__inner {
               color: var(--theme-text);
-              
+
               &::placeholder {
                 color: var(--theme-text-muted);
               }
             }
           }
-          
+
           .el-input-group__append {
             background: var(--theme-hover-bg);
             border: 1px solid var(--theme-border);
             border-left: none;
-            
+
             .el-button {
               color: var(--theme-primary);
-              
+
               &:hover {
                 color: var(--theme-glow);
               }
             }
           }
         }
-        
+
         :deep(.el-radio-group) {
           .el-radio-button {
             .el-radio-button__inner {
@@ -1780,12 +1776,12 @@ onMounted(() => {
               border: 1px solid var(--theme-border);
               color: var(--theme-text-secondary);
               padding: 8px 15px;
-              
+
               &:hover {
                 color: var(--theme-primary);
               }
             }
-            
+
             &.is-active .el-radio-button__inner {
               background: var(--theme-primary);
               border-color: var(--theme-primary);
@@ -1794,30 +1790,30 @@ onMounted(() => {
             }
           }
         }
-        
+
         :deep(.el-date-editor) {
           --el-date-editor-width: 240px;
-          
+
           .el-range-input {
             background: transparent;
             color: var(--theme-text);
           }
-          
+
           .el-range-separator {
             color: var(--theme-text-secondary);
           }
-          
+
           .el-range__icon {
             color: var(--theme-primary);
           }
-          
+
           .el-range-input::placeholder {
             color: var(--theme-text-muted);
           }
         }
       }
     }
-    
+
     .carousel-grid-wrapper {
       flex: 1;
       min-height: 0;
@@ -1863,13 +1859,13 @@ onMounted(() => {
         }
       }
     }
-    
+
     .carousel-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(400px, 0fr));
       gap: 15px;
       padding-bottom: 10px;
-      
+
       .carousel-item {
         background: var(--theme-hover-bg);
         border: 1px solid var(--theme-border);
@@ -1878,7 +1874,7 @@ onMounted(() => {
         display: flex;
         flex-direction: column;
         min-height: 250px;
-        
+
         .carousel-title {
           font-size: 13px;
           color: var(--theme-primary);
@@ -1886,14 +1882,14 @@ onMounted(() => {
           padding: 5px 0;
           flex-shrink: 0;
         }
-        
+
         :deep(.echarts) {
           flex: 1;
           min-height: 150px;
         }
       }
     }
-    
+
     .drill-loading {
       display: flex;
       flex-direction: column;
@@ -1901,7 +1897,7 @@ onMounted(() => {
       justify-content: center;
       height: 100%;
       color: var(--theme-text-secondary);
-      
+
       .loading-spinner {
         width: 32px;
         height: 32px;
@@ -1912,11 +1908,11 @@ onMounted(() => {
         margin-bottom: 10px;
       }
     }
-    
+
     .drill-chart-container {
       height: 100%;
       width: 100%;
-      
+
       .no-data {
         display: flex;
         align-items: center;
@@ -1926,7 +1922,7 @@ onMounted(() => {
         font-size: 14px;
       }
     }
-    
+
     .drill-dialog-header {
       display: flex;
       align-items: center;
@@ -1937,7 +1933,7 @@ onMounted(() => {
       background: linear-gradient(135deg, var(--theme-hover-bg) 0%, var(--theme-shadow) 100%);
       border-bottom: 1px solid var(--theme-border);
       margin: -20px -20px 0 -20px;
-      
+
       .drill-title {
         font-size: 18px;
         font-weight: 600;
@@ -1946,7 +1942,7 @@ onMounted(() => {
         text-align: center;
         line-height: 1.5;
       }
-      
+
       .drill-close-btn {
         position: absolute;
         right: 15px;
@@ -1963,18 +1959,18 @@ onMounted(() => {
         cursor: pointer;
         transition: all 0.3s ease;
         z-index: 10;
-        
+
         svg {
           width: 16px;
           height: 16px;
           color: #00b4ff;
         }
-        
+
         &:hover {
           background: rgba(0, 180, 255, 0.3);
           border-color: #00b4ff;
           box-shadow: 0 0 10px rgba(0, 180, 255, 0.5);
-          
+
           svg {
             color: #fff;
           }
@@ -1982,13 +1978,13 @@ onMounted(() => {
       }
     }
   }
-  
+
   .ranking-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     flex: 1;
-    
+
     .ranking-column {
       background: var(--theme-hover-bg);
       border: 1px solid var(--theme-border);
@@ -1996,13 +1992,13 @@ onMounted(() => {
       padding: 15px;
       display: flex;
       flex-direction: column;
-      
+
       &.single {
         max-width: 500px;
         margin: 0 auto;
         width: 100%;
       }
-      
+
       .ranking-header {
         font-size: 16px;
         color: var(--theme-primary);
@@ -2013,14 +2009,14 @@ onMounted(() => {
         margin-bottom: 15px;
         flex-shrink: 0;
       }
-      
+
       .ranking-list {
         flex: 1;
         display: flex;
         flex-direction: column;
         gap: 12px;
       }
-      
+
       .ranking-item {
         display: flex;
         align-items: center;
@@ -2029,12 +2025,12 @@ onMounted(() => {
         border-radius: 4px;
         cursor: pointer;
         transition: all 0.3s;
-        
+
         &:hover {
           background: linear-gradient(90deg, var(--theme-border-light) 0%, transparent 100%);
           transform: translateX(5px);
         }
-        
+
         .rank-badge {
           width: 22px;
           height: 22px;
@@ -2045,28 +2041,28 @@ onMounted(() => {
           font-size: 11px;
           font-weight: bold;
           margin-right: 8px;
-          
+
           &.rank-1 {
             background: linear-gradient(135deg, var(--theme-rank1) 0%, #ffaa00 100%);
             color: #1a1a1a;
           }
-          
+
           &.rank-2 {
             background: linear-gradient(135deg, var(--theme-rank2) 0%, #a0a0a0 100%);
             color: #1a1a1a;
           }
-          
+
           &.rank-3 {
             background: linear-gradient(135deg, var(--theme-rank3) 0%, #b87333 100%);
             color: #1a1a1a;
           }
-          
+
           &:not(.rank-1):not(.rank-2):not(.rank-3) {
             background: var(--theme-border);
             color: var(--theme-text);
           }
         }
-        
+
         .org-name {
           flex: 1;
           font-size: 12px;
@@ -2075,7 +2071,7 @@ onMounted(() => {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        
+
         .device-count {
           font-size: 12px;
           color: var(--theme-primary);
@@ -2084,19 +2080,19 @@ onMounted(() => {
       }
     }
   }
-  
+
   .ranking-single {
     flex: 1;
     display: flex;
     flex-direction: column;
   }
-  
+
   .ranking-table-section {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
-    
+
     .table-header {
       display: flex;
       justify-content: space-between;
@@ -2106,7 +2102,7 @@ onMounted(() => {
       background: linear-gradient(90deg, var(--theme-hover-bg) 0%, transparent 100%);
       margin-bottom: 12px;
       flex-shrink: 0;
-      
+
       h3 {
         margin: 0;
         font-size: 14px;
@@ -2115,7 +2111,7 @@ onMounted(() => {
         display: flex;
         align-items: center;
         gap: 6px;
-        
+
         &::before {
           content: '';
           display: inline-block;
@@ -2125,110 +2121,111 @@ onMounted(() => {
           border-radius: 2px;
         }
       }
-      
+
       .total-count {
         font-size: 12px;
         color: var(--theme-text-secondary);
       }
     }
-    
+
     :deep(.el-table) {
       flex: 1;
       background: transparent;
-      
+
       --el-table-bg-color: transparent;
       --el-table-tr-bg-color: transparent;
       --el-table-header-bg-color: var(--theme-hover-bg);
       --el-table-row-hover-bg-color: var(--theme-hover-bg);
       --el-table-border-color: var(--theme-border);
-      
+
       .el-table__inner-wrapper::before {
         display: none;
       }
-      
+
       th.el-table__cell {
         background: var(--theme-hover-bg) !important;
         color: var(--theme-primary) !important;
         font-weight: bold;
         border-bottom: 1px solid var(--theme-border-heavy) !important;
         white-space: nowrap !important;
-        
+
         .cell {
           white-space: nowrap !important;
         }
-        
+
         .caret-wrapper {
           .sort-caret {
             &.ascending {
               border-bottom-color: var(--theme-glow);
             }
+
             &.descending {
               border-top-color: var(--theme-glow);
             }
           }
         }
-        
+
         &.is-sortable:hover {
           background: var(--theme-shadow-heavy) !important;
         }
       }
-      
+
       td.el-table__cell {
         background: transparent !important;
         color: var(--theme-text);
         border-bottom: 1px solid var(--theme-border-light) !important;
         transition: all 0.3s ease;
       }
-      
+
       tr {
         background: transparent !important;
-        
+
         &:hover td.el-table__cell {
           background: var(--theme-hover-bg) !important;
         }
       }
-      
+
       .el-table__empty-text {
         color: var(--theme-text-muted);
       }
-      
+
       .org-name {
         font-size: 12px;
         color: var(--theme-text);
         font-weight: 500;
       }
-      
+
       .value-cell {
         font-size: 12px;
         font-weight: bold;
         color: var(--theme-primary);
-        
+
         &.memory {
           color: var(--theme-secondary);
         }
-        
+
         &.compute {
           color: var(--theme-danger);
         }
-        
+
         &.cpu {
           color: var(--theme-warning);
         }
-        
+
         &.ram {
           color: var(--theme-success);
         }
-        
+
         &.disk {
           color: var(--theme-info);
         }
-        
+
         &.usage {
           font-weight: bold;
         }
       }
     }
-    
+
     .rank-badge {
       display: inline-flex;
       align-items: center;
@@ -2238,34 +2235,34 @@ onMounted(() => {
       border-radius: 4px;
       font-size: 11px;
       font-weight: bold;
-      
+
       &.rank-1 {
         background: linear-gradient(135deg, var(--theme-rank1) 0%, #ffaa00 100%);
         color: #1a1a1a;
       }
-      
+
       &.rank-2 {
         background: linear-gradient(135deg, var(--theme-rank2) 0%, #a0a0a0 100%);
         color: #1a1a1a;
       }
-      
+
       &.rank-3 {
         background: linear-gradient(135deg, var(--theme-rank3) 0%, #b87333 100%);
         color: #1a1a1a;
       }
-      
+
       &:not(.rank-1):not(.rank-2):not(.rank-3) {
         background: var(--theme-border);
         color: var(--theme-text);
       }
     }
-    
+
     .org-name-link {
       font-size: 12px;
       color: var(--theme-text);
       cursor: pointer;
       transition: all 0.3s ease;
-      
+
       &:hover {
         color: var(--theme-primary);
       }

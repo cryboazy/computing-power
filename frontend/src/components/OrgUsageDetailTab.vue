@@ -341,13 +341,11 @@ const updateChartOptions = () => {
     series: [
       {
         name: 'GPU使用率',
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 4,
-        data: dailyData.map(d => d.avg_usage),
-        lineStyle: { color: colors.chart1, width: 2 },
-        itemStyle: { color: colors.chart1 }
+        type: 'bar',
+        data: dailyData.map(d => ({
+          value: d.avg_usage,
+          itemStyle: { color: getUsageColor(d.avg_usage), borderRadius: [4, 4, 0, 0] }
+        }))
       },
       {
         name: '显存使用率',
@@ -410,13 +408,11 @@ const updateChartOptions = () => {
     series: [
       {
         name: 'GPU使用率',
-        type: 'line',
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 4,
-        data: hourlyData.map(d => d.avg_usage),
-        lineStyle: { color: colors.chart1, width: 2 },
-        itemStyle: { color: colors.chart1 }
+        type: 'bar',
+        data: hourlyData.map(d => ({
+          value: d.avg_usage,
+          itemStyle: { color: getUsageColor(d.avg_usage), borderRadius: [4, 4, 0, 0] }
+        }))
       },
       {
         name: '显存使用率',

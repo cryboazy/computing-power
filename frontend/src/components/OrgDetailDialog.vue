@@ -68,30 +68,7 @@
             </div>
           </div>
           <div v-if="activeTab === 'usage'" class="tab-controls">
-            <div class="quick-select-buttons">
-              <el-button 
-                size="small" 
-                :type="quickSelect === '1m' ? 'primary' : 'default'"
-                @click="setQuickSelect('1m')"
-              >近一个月</el-button>
-              <el-button 
-                size="small" 
-                :type="quickSelect === '3m' ? 'primary' : 'default'"
-                @click="setQuickSelect('3m')"
-              >近三个月</el-button>
-              <el-button 
-                size="small" 
-                :type="quickSelect === '6m' ? 'primary' : 'default'"
-                @click="setQuickSelect('6m')"
-              >近半年</el-button>
-              <el-button 
-                size="small" 
-                :type="quickSelect === '1y' ? 'primary' : 'default'"
-                @click="setQuickSelect('1y')"
-              >近一年</el-button>
-            </div>
             <div class="filter-group">
-              <span class="filter-label">运行网络：</span>
               <el-select
                 v-model="globalNetworkFilter"
                 placeholder="全部网络"
@@ -111,7 +88,6 @@
               </el-select>
             </div>
             <div class="filter-group">
-              <span class="filter-label">用途：</span>
               <el-select
                 v-model="selectedPurpose"
                 placeholder="全部用途"
@@ -119,15 +95,18 @@
                 class="purpose-select"
               >
                 <el-option
+                  label="全部用途"
+                  value=""
+                />
+                <el-option
                   v-for="purpose in purposeList"
-                  :key="purpose.value"
-                  :label="purpose.label"
-                  :value="purpose.value"
+                  :key="purpose.dict_value"
+                  :label="purpose.dict_label"
+                  :value="purpose.dict_value"
                 />
               </el-select>
             </div>
             <div class="filter-group">
-              <span class="filter-label">日期范围：</span>
               <el-date-picker
                 v-model="dateRange"
                 type="daterange"
@@ -136,7 +115,7 @@
                 end-placeholder="结束日期"
                 size="small"
                 value-format="YYYY-MM-DD"
-                @change="onDateRangeChange"
+                :shortcuts="dateShortcuts"
               />
             </div>
           </div>
@@ -155,6 +134,11 @@
             :date-range="dateRange"
             :purpose="selectedPurpose"
           />
+          
+          <OrgReportTab 
+            v-if="activeTab === 'reports'"
+            :org-id="orgId"
+          />
         </div>
       </div>
     </div>
@@ -168,6 +152,7 @@ import { Loading, Warning } from '@element-plus/icons-vue'
 import { dashboardApi } from '../api'
 import DeviceDetailTab from './DeviceDetailTab.vue'
 import OrgUsageDetailTab from './OrgUsageDetailTab.vue'
+import OrgReportTab from './OrgReportTab.vue'
 
 const globalNetworkFilter = inject('globalNetworkFilter')
 const networkList = inject('networkList')
@@ -233,9 +218,7 @@ const loading = ref(false)
 const error = ref(null)
 const orgDetail = ref(null)
 const orgName = ref('')
-const quickSelect = ref(null)
 
-const today = new Date()
 const formatDate = (date) => {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
@@ -250,30 +233,47 @@ const getDateRangeFromTimeRange = (timeRange) => {
   return [formatDate(startDate), formatDate(now)]
 }
 
-const getDateRange = (type) => {
-  const now = new Date()
-  let startDate
-  switch (type) {
-    case '1m':
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      break
-    case '3m':
-      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-      break
-    case '6m':
-      startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000)
-      break
-    case '1y':
-      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
-      break
-    default:
-      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-  }
-  return [formatDate(startDate), formatDate(now)]
-}
-
 const dateRange = ref(getDateRangeFromTimeRange(props.timeRange))
 const selectedPurpose = ref('')
+
+const dateShortcuts = [
+  {
+    text: '近一个月',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 30 * 24 * 60 * 60 * 1000)
+      return [start, end]
+    }
+  },
+  {
+    text: '近三个月',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 90 * 24 * 60 * 60 * 1000)
+      return [start, end]
+    }
+  },
+  {
+    text: '近半年',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 180 * 24 * 60 * 60 * 1000)
+      return [start, end]
+    }
+  },
+  {
+    text: '近一年',
+    value: () => {
+      const end = new Date()
+      const start = new Date()
+      start.setTime(start.getTime() - 365 * 24 * 60 * 60 * 1000)
+      return [start, end]
+    }
+  }
+]
 
 const fetchPurposeList = async () => {
   if (purposeList.value && purposeList.value.length > 0) {
@@ -299,18 +299,10 @@ onMounted(() => {
   fetchPurposeList()
 })
 
-const setQuickSelect = (type) => {
-  quickSelect.value = type
-  dateRange.value = getDateRange(type)
-}
-
-const onDateRangeChange = () => {
-  quickSelect.value = null
-}
-
 const tabs = [
   { label: '设备详情', value: 'devices' },
-  { label: '使用率详情', value: 'usage' }
+  { label: '使用率详情', value: 'usage' },
+  { label: '分析报告', value: 'reports' }
 ]
 
 const fetchData = async () => {
@@ -640,11 +632,6 @@ watch(() => props.initialTab, (newVal) => {
     align-items: center;
     gap: 20px;
     padding-right: 20px;
-    
-    .quick-select-buttons {
-      display: flex;
-      gap: 8px;
-    }
     
     .filter-group {
       display: flex;

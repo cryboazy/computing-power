@@ -38,14 +38,11 @@
               @click="warningViewType = 'list'"
             >列表</span>
           </div>
-          <div class="level-selector">
-            <span 
-              v-for="level in WARNING_LEVEL_OPTIONS" 
-              :key="level.value"
-              :class="['level-btn', { active: warningLevel === level.value }]"
-              @click="warningLevel = level.value; warningPageIndex = 0"
-            >{{ level.label }}</span>
-          </div>
+          <select class="level-selector" v-model="warningLevel" @change="warningPageIndex = 0">
+            <option v-for="level in WARNING_LEVEL_OPTIONS" :key="level.value" :value="level.value">
+              {{ level.label }}
+            </option>
+          </select>
           <div v-show="warningViewType === 'chart'" class="carousel-indicator">
             <span 
               v-for="i in warningPageCount" 
@@ -159,11 +156,24 @@ const combinedTrendOption = computed(() => {
       formatter: (params) => {
         let result = params[0].axisValue + '<br/>'
         params.forEach(param => {
-          const unit = param.seriesName.includes('设备') ? '台' : 
-                       param.seriesName.includes('GPU卡') ? '张' : 
-                       param.seriesName.includes('显存') ? 'GB' : 
-                       param.seriesName.includes('算力') ? 'PF' : ''
-          result += `${param.marker} ${param.seriesName}: ${param.value}${unit}<br/>`
+          let unit = ''
+          let value = param.value
+          if (param.seriesName.includes('设备')) {
+            unit = '台'
+          } else if (param.seriesName.includes('GPU卡')) {
+            unit = '张'
+          } else if (param.seriesName.includes('显存')) {
+            if (value >= 1024) {
+              value = (value / 1024).toFixed(2)
+              unit = 'TB'
+            } else {
+              value = Math.round(value)
+              unit = 'GB'
+            }
+          } else if (param.seriesName.includes('算力')) {
+            unit = 'PF'
+          }
+          result += `${param.marker} ${param.seriesName}: ${value}${unit}<br/>`
         })
         return result
       }
@@ -606,30 +616,28 @@ onUnmounted(() => {
   }
   
   .level-selector {
-    display: flex;
-    gap: 2px;
+    padding: 2px 6px;
+    font-size: 10px;
+    color: var(--theme-text);
     background: var(--theme-shadow);
+    border: 1px solid var(--theme-border);
     border-radius: 4px;
-    padding: 2px;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.3s ease;
     
-    .level-btn {
-      padding: 2px 8px;
-      font-size: 10px;
-      color: var(--theme-text-secondary);
-      cursor: pointer;
-      border-radius: 3px;
-      transition: all 0.3s ease;
-      
-      &:hover {
-        color: var(--theme-primary);
-        background: var(--theme-border-light);
-      }
-      
-      &.active {
-        color: var(--theme-text);
-        background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-secondary) 100%);
-        box-shadow: 0 0 6px var(--theme-glow);
-      }
+    &:hover {
+      border-color: var(--theme-primary);
+    }
+    
+    &:focus {
+      border-color: var(--theme-primary);
+      box-shadow: 0 0 4px var(--theme-glow);
+    }
+    
+    option {
+      background: var(--theme-panel-bg-start);
+      color: var(--theme-text);
     }
   }
   
