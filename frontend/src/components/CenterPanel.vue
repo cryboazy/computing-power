@@ -168,10 +168,10 @@
                 </div>
               </div>
             </div>
-            <template v-if="gpuTierByOrgData.length">
+            <template v-if="gpuTierByOrgData.length && isTierLoaded()">
               <v-chart :option="gpuTierOption" autoresize />
             </template>
-            <div v-if="!gpuTierByOrgData.length" class="no-data">
+            <div v-if="!gpuTierByOrgData.length || !isTierLoaded()" class="no-data">
               暂无数据
             </div>
           </div>
@@ -498,10 +498,10 @@
               <div class="chart-title">
                 GPU档次分布
               </div>
-              <template v-if="centralGpuTierData.length && centralGpuTierOption">
+              <template v-if="centralGpuTierData.length && centralGpuTierOption && isTierLoaded()">
                 <v-chart :option="centralGpuTierOption" autoresize />
               </template>
-              <div v-if="!centralGpuTierData.length || !centralGpuTierOption" class="no-data">
+              <div v-if="!centralGpuTierData.length || !centralGpuTierOption || !isTierLoaded()" class="no-data">
                 暂无数据
               </div>
             </div>
@@ -603,7 +603,7 @@ import { dashboardApi } from '../api'
 import chinaMapData from '../assets/china.json'
 import * as echarts from 'echarts'
 import { useTheme, watchThemeChange } from '../composables/useTheme'
-import { loadTierList, getTierConfigForChart, getTierColors } from '../store/gpuTierStore'
+import { loadTierList, getTierConfigForChart, getTierColors, isTierLoaded } from '../store/gpuTierStore'
 
 const usageThresholds = inject('usageThresholds', ref({ high: 60.0, low: 30.0 }))
 
@@ -1204,6 +1204,10 @@ const gpuTierOption = computed(() => {
   const tierKeys = tierConfig.keys
   const tierColors = tierConfig.colors
   
+  if (tierKeys.length === 0 || !gpuTierByOrgData.value.length) {
+    return {}
+  }
+  
   if (gpuTierChartType.value === 'pie') {
     const totals = tierKeys.map((key, index) => ({
       name: tierNames[index],
@@ -1489,7 +1493,7 @@ const purposePieOption = computed(() => {
 
 const mapOption = computed(() => {
   const colors = getAllColors()
-  const maxValue = Math.max(...provinceData.value.map(d => d.value), 10)
+  const maxUsage = Math.max(...provinceData.value.map(d => d.avg_gpu_usage || 0), 100)
   
   const provinceDataMap = {}
   provinceData.value.forEach(d => {
@@ -1546,7 +1550,7 @@ const mapOption = computed(() => {
         return [posX, posY]
       },
       formatter: (params) => {
-        if (params.data && params.data.value > 0) {
+        if (params.data && params.data.device_count > 0) {
           const d = params.data
           const usageColor = getUsageColor(d.avg_gpu_usage)
           const computeDisplay = d.compute_tflops >= 1000 
@@ -1559,7 +1563,7 @@ const mapOption = computed(() => {
           return `<div style="font-weight: bold; margin-bottom: 8px; font-size: 14px;">${params.name}</div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
               <span style="color: ${colors.textSecondary};">设备数量:</span>
-              <span style="color: ${colors.chart1}; font-weight: bold;">${d.value} 台</span>
+              <span style="color: ${colors.chart1}; font-weight: bold;">${d.device_count} 台</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
               <span style="color: ${colors.textSecondary};">GPU数量:</span>
@@ -1586,18 +1590,19 @@ const mapOption = computed(() => {
     },
     visualMap: {
       min: 0,
-      max: maxValue,
+      max: 100,
       left: 'left',
       bottom: '10%',
       text: ['高', '低'],
       textStyle: { color: colors.textSecondary },
       inRange: {
-        color: [colors.bgMiddle, colors.chart1, colors.chart2]
+        color: [colors.usageLow, colors.usageMedium, colors.usageHigh]
       },
-      calculable: true
+      calculable: true,
+      formatter: (value) => `${value.toFixed(0)}%`
     },
     series: [{
-      name: '设备分布',
+      name: 'GPU使用率分布',
       type: 'map',
       map: 'china',
       roam: true,
@@ -1625,7 +1630,16 @@ const mapOption = computed(() => {
         show: false,
         color: colors.textSecondary
       },
-      data: mapData
+      data: mapData.map(d => ({
+        name: d.name,
+        value: d.avg_gpu_usage,
+        adcode: d.adcode,
+        device_count: d.value,
+        gpu_count: d.gpu_count,
+        memory_gb: d.memory_gb,
+        compute_tflops: d.compute_tflops,
+        avg_gpu_usage: d.avg_gpu_usage
+      }))
     }]
   }
 })
@@ -1898,29 +1912,33 @@ const centralBarOption = computed(() => {
     },
     series: [{
       type: 'bar',
-      data: centralData.value.map((d, i) => ({
-        value: d.value,
-        name: d.name,
-        org_id: d.org_id,
-        gpu_count: d.gpu_count,
-        memory_gb: d.memory_gb,
-        compute_tflops: d.compute_tflops
-      })).reverse(),
-      itemStyle: {
-        color: {
-          type: 'linear',
-          x: 0, y: 0, x2: 1, y2: 0,
-          colorStops: [
-            { offset: 0, color: colors.border },
-            { offset: 1, color: colors.chart1 }
-          ]
-        },
-        borderRadius: [0, 4, 4, 0]
-      },
+      data: centralData.value.map((d, i) => {
+        const usageColor = getUsageColor(d.avg_gpu_usage || 0)
+        return {
+          value: d.value,
+          name: d.name,
+          org_id: d.org_id,
+          gpu_count: d.gpu_count,
+          memory_gb: d.memory_gb,
+          compute_tflops: d.compute_tflops,
+          avg_gpu_usage: d.avg_gpu_usage,
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 1, y2: 0,
+              colorStops: [
+                { offset: 0, color: usageColor + '80' },
+                { offset: 1, color: usageColor }
+              ]
+            },
+            borderRadius: [0, 4, 4, 0]
+          }
+        }
+      }).reverse(),
       label: {
         show: true,
         position: 'right',
-        color: colors.chart1,
+        color: colors.text,
         formatter: '{c}台'
       }
     }]
@@ -2392,7 +2410,7 @@ const fetchData = async () => {
       dashboardApi.getLocalGpuTier(network, purposeFilter),
       dashboardApi.getLocalPurpose(network, purposeFilter),
       dashboardApi.getLocalNetwork(network, purposeFilter),
-      dashboardApi.getCentralBubble(timeType.value, network, purposeFilter),
+      dashboardApi.getCentralBubble(globalTimeRange.value, timeType.value, network, purposeFilter),
       dashboardApi.getCentralStats(globalTimeRange.value, timeType.value, network, purposeFilter),
       dashboardApi.getCentralGpuTier(network, purposeFilter),
       dashboardApi.getCentralPurpose(network, purposeFilter),
@@ -2538,10 +2556,10 @@ const stopCarousel = () => {
 
 let cleanup = null
 
-onMounted(() => {
+onMounted(async () => {
+  await loadTierList()
   fetchData()
   startCarousel()
-  loadTierList()
   cleanup = watchThemeChange(() => {
     fetchData()
   })

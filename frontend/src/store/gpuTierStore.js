@@ -1,23 +1,11 @@
 import { ref, computed } from 'vue'
 import axios from 'axios'
 
-const DEFAULT_TIER_CONFIG = {
-  1: { label: '高端卡', key: 'high' },
-  2: { label: '中端卡', key: 'medium' },
-  3: { label: '低端卡', key: 'low' }
-}
-
-const DEFAULT_TIER_KEYS = ['high', 'medium', 'low', 'unknown']
-const DEFAULT_TIER_NAMES = ['高端卡', '中端卡', '低端卡', '未知']
-
 const tierList = ref([])
 const isLoading = ref(false)
 const error = ref(null)
 
 const tierConfig = computed(() => {
-  if (tierList.value.length === 0) {
-    return { ...DEFAULT_TIER_CONFIG }
-  }
   const config = {}
   tierList.value.forEach(item => {
     config[item.dict_value] = {
@@ -29,18 +17,12 @@ const tierConfig = computed(() => {
 })
 
 const tierKeys = computed(() => {
-  if (tierList.value.length === 0) {
-    return [...DEFAULT_TIER_KEYS]
-  }
   const keys = tierList.value.map(t => t.dict_label)
   keys.push('未知')
   return keys
 })
 
 const tierNames = computed(() => {
-  if (tierList.value.length === 0) {
-    return [...DEFAULT_TIER_NAMES]
-  }
   const names = tierList.value.map(t => t.dict_label)
   names.push('未知')
   return names
@@ -54,7 +36,8 @@ export async function loadTierList() {
 
   try {
     const response = await axios.get('/api/admin/dict/gpu-tier')
-    tierList.value = response.data || []
+    const data = response.data || []
+    tierList.value = data.filter(t => t.status === 1)
     return tierList.value
   } catch (err) {
     error.value = err.message
@@ -83,46 +66,36 @@ export function getTierConfig() {
 
 export function getTierKey(cardType) {
   const config = tierConfig.value[cardType]
-  if (config) {
-    return config.key
-  }
-  const defaultConfig = DEFAULT_TIER_CONFIG[cardType]
-  return defaultConfig ? defaultConfig.key : 'unknown'
+  return config ? config.key : '未知'
 }
 
 export function getTierLabel(cardType) {
   const config = tierConfig.value[cardType]
-  if (config) {
-    return config.label
-  }
-  const defaultConfig = DEFAULT_TIER_CONFIG[cardType]
-  return defaultConfig ? defaultConfig.label : '未知'
+  return config ? config.label : '未知'
 }
 
 export function getTierColors(themeColors) {
-  return {
-    high: themeColors.danger,
-    medium: themeColors.warning,
-    low: themeColors.success,
-    unknown: themeColors.info
-  }
+  const tierColorKeys = ['danger', 'warning', 'success', 'primary', 'secondary']
+  const result = {}
+  tierList.value.forEach((t, i) => {
+    const colorKey = tierColorKeys[i % tierColorKeys.length]
+    result[t.dict_label] = themeColors[colorKey]
+  })
+  result['未知'] = themeColors.info
+  return result
 }
 
 export function getTierConfigForChart(themeColors) {
-  const colors = themeColors 
-    ? Object.values(getTierColors(themeColors))
-    : [undefined, undefined, undefined, undefined]
+  const tierColors = getTierColors(themeColors)
+  const colors = tierList.value.map(t => tierColors[t.dict_label])
+  colors.push(tierColors['未知'])
 
-  if (tierList.value.length === 0) {
-    return {
-      names: [...DEFAULT_TIER_NAMES],
-      keys: [...DEFAULT_TIER_KEYS],
-      colors
-    }
-  }
-
-  const names = tierList.value.map(t => t.dict_label)
-  const keys = tierList.value.map(t => t.dict_label)
+  const names = []
+  const keys = []
+  tierList.value.forEach(t => {
+    names.push(t.dict_label)
+    keys.push(t.dict_label)
+  })
   names.push('未知')
   keys.push('未知')
 
@@ -172,6 +145,10 @@ export function calculateTierTotal(data) {
   return data.reduce((sum, item) => sum + (item.value || 0), 0)
 }
 
+export function isTierLoaded() {
+  return tierList.value.length > 0
+}
+
 export default {
   tierList,
   isLoading,
@@ -187,5 +164,6 @@ export default {
   getTierConfigForChart,
   formatTierData,
   extractTierCounts,
-  calculateTierTotal
+  calculateTierTotal,
+  isTierLoaded
 }

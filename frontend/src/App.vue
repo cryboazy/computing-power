@@ -233,7 +233,7 @@ const orgDetailVisible = ref(false)
 const currentOrgId = ref(null)
 const currentOrgActiveTab = ref('devices')
 
-const timeType = ref('work')
+const timeType = ref('all')
 const TIME_TYPE_OPTIONS = [
   { value: 'work', label: '工作时间' },
   { value: 'nonwork', label: '非工作时间' },

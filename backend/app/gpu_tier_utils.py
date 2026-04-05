@@ -4,12 +4,6 @@ from app.local_models import LocalGpuTierDict
 
 
 class GPUTierManager:
-    DEFAULT_TIERS = {
-        1: {"label": "高端卡", "key": "high"},
-        2: {"label": "中端卡", "key": "medium"},
-        3: {"label": "低端卡", "key": "low"}
-    }
-
     def __init__(self, db: Session):
         self.db = db
         self._cache = None
@@ -32,9 +26,6 @@ class GPUTierManager:
                 "id": tier.id
             }
 
-        if not self._cache:
-            self._cache = self.DEFAULT_TIERS.copy()
-
         return self._cache
 
     def invalidate_cache(self):
@@ -45,15 +36,14 @@ class GPUTierManager:
         tier = tiers.get(card_type)
         if tier:
             return tier["label"]
-        return self.DEFAULT_TIERS.get(card_type, {}).get("label", "未知")
+        return "未知"
 
     def get_tier_key(self, card_type: int) -> str:
         tiers = self._load_tiers()
         tier = tiers.get(card_type)
         if tier:
             return tier["key"]
-        default = self.DEFAULT_TIERS.get(card_type, {})
-        return default.get("key", "unknown")
+        return "未知"
 
     def get_all_tiers(self) -> List[Dict]:
         tiers = self._load_tiers()
@@ -67,11 +57,6 @@ class GPUTierManager:
         result = {}
         for card_type, tier_info in tiers.items():
             result[card_type] = tier_info["label"]
-
-        for card_type, default_info in self.DEFAULT_TIERS.items():
-            if card_type not in result:
-                result[card_type] = default_info["label"]
-
         return result
 
     def calculate_tier_counts(self, gpu_infos: Dict, devices: List) -> Dict[str, int]:

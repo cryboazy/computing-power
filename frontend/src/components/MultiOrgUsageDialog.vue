@@ -52,15 +52,6 @@
         <div v-else-if="subType === 'carousel'" class="carousel-section">
           <div class="filter-bar">
             <div class="filter-item">
-              <label>单位类型</label>
-              <el-select v-model="carouselOrgType" placeholder="全部" clearable size="small"
-                @change="handleCarouselFilter">
-                <el-option label="部机关" value="central" />
-                <el-option label="地方厅局" value="local" />
-              </el-select>
-            </div>
-            <div class="filter-item">
-              <label>单位名称</label>
               <el-input v-model="carouselOrgName" placeholder="请输入单位名称" size="small" clearable
                 @keyup.enter="handleCarouselFilter" @clear="handleCarouselFilter">
                 <template #append>
@@ -69,7 +60,20 @@
               </el-input>
             </div>
             <div class="filter-item">
-              <label>运行网络</label>
+              <el-radio-group v-model="carouselTimeGrain" size="small" @change="handleTimeGrainChange">
+                <el-radio-button value="day">日</el-radio-button>
+                <el-radio-button value="week">周</el-radio-button>
+                <el-radio-button value="month">月</el-radio-button>
+              </el-radio-group>
+            </div>
+            <div class="filter-item">
+              <el-select v-model="carouselOrgType" placeholder="全部单位" clearable size="small"
+                @change="handleCarouselFilter">
+                <el-option label="部机关" value="central" />
+                <el-option label="地方厅局" value="local" />
+              </el-select>
+            </div>
+            <div class="filter-item">
               <el-select v-model="carouselNetwork" placeholder="全部网络" clearable size="small"
                 @change="handleCarouselFilter">
                 <el-option v-for="network in networkList" :key="network.code" :label="network.name"
@@ -77,7 +81,6 @@
               </el-select>
             </div>
             <div class="filter-item">
-              <label>设备用途</label>
               <el-select v-model="carouselPurpose" placeholder="全部用途" clearable size="small"
                 @change="handleCarouselFilter">
                 <el-option v-for="purpose in purposeList" :key="purpose.dict_value" :label="purpose.dict_label"
@@ -85,7 +88,6 @@
               </el-select>
             </div>
             <div class="filter-item">
-              <label>时间类型</label>
               <el-select v-model="carouselTimeType" placeholder="全部" size="small" @change="handleCarouselFilter">
                 <el-option label="工作时间" value="work" />
                 <el-option label="非工作时间" value="nonwork" />
@@ -93,17 +95,9 @@
               </el-select>
             </div>
             <div class="filter-item">
-              <label>时间段</label>
               <el-date-picker v-model="carouselDateRange" type="daterange" range-separator="至" start-placeholder="开始日期"
                 end-placeholder="结束日期" size="small" format="YYYY-MM-DD" value-format="YYYY-MM-DD"
                 @change="handleDateRangeChange" />
-            </div>
-            <div class="filter-item">
-              <el-radio-group v-model="carouselTimeGrain" size="small" @change="handleTimeGrainChange">
-                <el-radio-button value="day">日</el-radio-button>
-                <el-radio-button value="week">周</el-radio-button>
-                <el-radio-button value="month">月</el-radio-button>
-              </el-radio-group>
             </div>
           </div>
           <div class="carousel-grid-wrapper">
@@ -1738,7 +1732,7 @@ onMounted(() => {
         }
 
         :deep(.el-input) {
-          width: 150px;
+          width: 250px;
 
           .el-input__wrapper {
             background: var(--theme-input-bg);
@@ -1792,7 +1786,7 @@ onMounted(() => {
         }
 
         :deep(.el-date-editor) {
-          --el-date-editor-width: 240px;
+          --el-date-editor-width: 280px;
 
           .el-range-input {
             background: transparent;

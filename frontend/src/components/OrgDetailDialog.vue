@@ -107,6 +107,18 @@
               </el-select>
             </div>
             <div class="filter-group">
+              <el-select
+                v-model="selectedTimeType"
+                placeholder="时间类型"
+                size="small"
+                class="purpose-select"
+              >
+                <el-option label="工作时间" value="work" />
+                <el-option label="非工作时间" value="nonwork" />
+                <el-option label="全部" value="all" />
+              </el-select>
+            </div>
+            <div class="filter-group">
               <el-date-picker
                 v-model="dateRange"
                 type="daterange"
@@ -133,6 +145,7 @@
             :org-id="orgId"
             :date-range="dateRange"
             :purpose="selectedPurpose"
+            :time-type="selectedTimeType"
           />
           
           <OrgReportTab 
@@ -235,6 +248,7 @@ const getDateRangeFromTimeRange = (timeRange) => {
 
 const dateRange = ref(getDateRangeFromTimeRange(props.timeRange))
 const selectedPurpose = ref('')
+const selectedTimeType = ref(props.timeType)
 
 const dateShortcuts = [
   {
@@ -361,6 +375,7 @@ watch(() => props.visible, (newVal) => {
 })
 
 watch(() => props.timeType, (newVal) => {
+  selectedTimeType.value = newVal
   if (dialogVisible.value && props.orgId) {
     fetchData()
   }
@@ -646,6 +661,10 @@ watch(() => props.initialTab, (newVal) => {
       
       .purpose-select {
         min-width: 100px;
+      }
+      
+      :deep(.el-date-editor) {
+        --el-date-editor-width: 280px;
       }
     }
   }

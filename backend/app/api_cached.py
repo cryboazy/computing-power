@@ -988,11 +988,17 @@ def get_province_distribution(
 
 @router.get("/bubble/central")
 def get_central_bubble(
+    time_range: str = Query("month", description="时间范围: month, quarter, half_year, year"),
     time_type: str = Query("work", description="时间类型: work(工作时间), nonwork(非工作时间), all(全天)"),
     network: str = Query(None, description="网络分类代码"),
     purpose: int = Query(None, description="用途过滤: 1-训练, 2-研发, 3-推理"),
     local_db: Session = Depends(get_local_db)
 ):
+    params = TimeRangeParams(time_range=time_range)
+    start_date, end_date = params.get_date_range()
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
     central_org_ids = get_org_ids_by_type_cached(local_db, 'central')
 
     gpu_infos = {g.gpu_name: g for g in local_db.query(LocalGpuCardInfo).filter(LocalGpuCardInfo.deleted == 0).all()}
@@ -1031,13 +1037,35 @@ def get_central_bubble(
                 memory_gb += float(gpu_info.memory_total_gb or 0) * dev_gpu_count
                 compute_tflops += float(gpu_info.tflops_fp16 or 0) * dev_gpu_count
 
+        device_ids = [d.id for d in devices]
+        avg_gpu_usage = 0
+        
+        if device_ids:
+            summaries = local_db.query(LocalDailyDeviceSummary).filter(
+                LocalDailyDeviceSummary.summary_date >= start_datetime,
+                LocalDailyDeviceSummary.summary_date <= end_datetime,
+                LocalDailyDeviceSummary.device_id.in_(device_ids)
+            ).all()
+            
+            if summaries:
+                if time_type == "work":
+                    usage_values = [float(s.avg_gpu_usage_rate_work or 0) for s in summaries if s.avg_gpu_usage_rate_work is not None]
+                elif time_type == "nonwork":
+                    usage_values = [float(s.avg_gpu_usage_rate_nonwork or 0) for s in summaries if s.avg_gpu_usage_rate_nonwork is not None]
+                else:
+                    usage_values = [float(s.avg_gpu_usage_rate or 0) for s in summaries if s.avg_gpu_usage_rate is not None]
+                
+                if usage_values:
+                    avg_gpu_usage = round(sum(usage_values) / len(usage_values), 2)
+
         result.append({
             "org_id": org.id,
             "name": org.name,
             "value": device_count,
             "gpu_count": gpu_count,
             "memory_gb": round(memory_gb, 2),
-            "compute_tflops": round(compute_tflops, 2)
+            "compute_tflops": round(compute_tflops, 2),
+            "avg_gpu_usage": avg_gpu_usage
         })
 
     return result
@@ -2201,6 +2229,9 @@ def get_org_usage_trend(
     monthly_memory_data = {}
     daily_memory_data = {}
     hourly_memory_data = {}
+    monthly_memory_utilization_data = {}
+    daily_memory_utilization_data = {}
+    hourly_memory_utilization_data = {}
     
     for summary in local_db.query(LocalDailyDeviceSummary).filter(
         LocalDailyDeviceSummary.device_id.in_(device_ids),
@@ -2218,18 +2249,23 @@ def get_org_usage_trend(
             val = float(summary.avg_gpu_usage_rate or 0)
         
         memory_val = float(summary.avg_memory_usage_rate or 0)
+        memory_utilization_val = float(summary.avg_memory_utilization or 0)
         
         if month_key not in monthly_data:
             monthly_data[month_key] = []
             monthly_memory_data[month_key] = []
+            monthly_memory_utilization_data[month_key] = []
         monthly_data[month_key].append(val)
         monthly_memory_data[month_key].append(memory_val)
+        monthly_memory_utilization_data[month_key].append(memory_utilization_val)
         
         if day_key not in daily_data:
             daily_data[day_key] = []
             daily_memory_data[day_key] = []
+            daily_memory_utilization_data[day_key] = []
         daily_data[day_key].append(val)
         daily_memory_data[day_key].append(memory_val)
+        daily_memory_utilization_data[day_key].append(memory_utilization_val)
     
     for hourly in local_db.query(LocalDeviceHourlyStats).filter(
         LocalDeviceHourlyStats.device_id.in_(device_ids),
@@ -2245,14 +2281,17 @@ def get_org_usage_trend(
         if hour_key not in hourly_data:
             hourly_data[hour_key] = []
             hourly_memory_data[hour_key] = []
+            hourly_memory_utilization_data[hour_key] = []
         hourly_data[hour_key].append(float(hourly.avg_gpu_usage_rate or 0))
         hourly_memory_data[hour_key].append(float(hourly.avg_memory_usage_rate or 0))
+        hourly_memory_utilization_data[hour_key].append(float(hourly.avg_memory_utilization or 0))
     
     monthly_result = [
         {
             "month": k, 
             "avg_usage": round(sum(monthly_data.get(k, [])) / len(monthly_data.get(k, [])), 2) if monthly_data.get(k) else 0,
-            "avg_memory_usage": round(sum(monthly_memory_data.get(k, [])) / len(monthly_memory_data.get(k, [])), 2) if monthly_memory_data.get(k) else 0
+            "avg_memory_usage": round(sum(monthly_memory_data.get(k, [])) / len(monthly_memory_data.get(k, [])), 2) if monthly_memory_data.get(k) else 0,
+            "avg_memory_utilization": round(sum(monthly_memory_utilization_data.get(k, [])) / len(monthly_memory_utilization_data.get(k, [])), 2) if monthly_memory_utilization_data.get(k) else 0
         }
         for k in sorted(monthly_data.keys())
     ]
@@ -2261,7 +2300,8 @@ def get_org_usage_trend(
         {
             "date": k, 
             "avg_usage": round(sum(daily_data.get(k, [])) / len(daily_data.get(k, [])), 2) if daily_data.get(k) else 0,
-            "avg_memory_usage": round(sum(daily_memory_data.get(k, [])) / len(daily_memory_data.get(k, [])), 2) if daily_memory_data.get(k) else 0
+            "avg_memory_usage": round(sum(daily_memory_data.get(k, [])) / len(daily_memory_data.get(k, [])), 2) if daily_memory_data.get(k) else 0,
+            "avg_memory_utilization": round(sum(daily_memory_utilization_data.get(k, [])) / len(daily_memory_utilization_data.get(k, [])), 2) if daily_memory_utilization_data.get(k) else 0
         }
         for k in sorted(daily_data.keys())
     ]
@@ -2271,10 +2311,12 @@ def get_org_usage_trend(
         hour_key = str(hour)
         values = hourly_data.get(hour_key, [])
         memory_values = hourly_memory_data.get(hour_key, [])
+        memory_utilization_values = hourly_memory_utilization_data.get(hour_key, [])
         hourly_result.append({
             "hour": hour,
             "avg_usage": round(sum(values) / len(values), 2) if values else 0,
-            "avg_memory_usage": round(sum(memory_values) / len(memory_values), 2) if memory_values else 0
+            "avg_memory_usage": round(sum(memory_values) / len(memory_values), 2) if memory_values else 0,
+            "avg_memory_utilization": round(sum(memory_utilization_values) / len(memory_utilization_values), 2) if memory_utilization_values else 0
         })
     
     warning_info = None

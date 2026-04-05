@@ -140,8 +140,8 @@ export const dashboardApi = {
     if (network) params.network = network
     return api.get('/local/trend', { params })
   },
-  getCentralBubble: (timeType = 'work', network = null, purpose = null) => {
-    const params = { time_type: timeType }
+  getCentralBubble: (timeRange = 'month', timeType = 'work', network = null, purpose = null) => {
+    const params = { time_range: timeRange, time_type: timeType }
     if (network) params.network = network
     if (purpose && purpose !== 'all') params.purpose = parseInt(purpose)
     return api.get('/bubble/central', { params })

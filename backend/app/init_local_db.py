@@ -68,29 +68,32 @@ def init_local_purpose_dict(db):
 
 
 def init_local_gpu_tier_dict(db):
+    existing_count = db.query(LocalGpuTierDict).filter(
+        LocalGpuTierDict.dict_type == 'gpu_tier'
+    ).count()
+
+    if existing_count > 0:
+        print(f"本地GPU档次字典已存在 {existing_count} 条记录，跳过初始化")
+        return
+
     tier_dicts = [
-        {"id": 1, "dict_label": "高端卡", "dict_value": 1, "dict_sort": 1},
-        {"id": 2, "dict_label": "中端卡", "dict_value": 2, "dict_sort": 2},
-        {"id": 3, "dict_label": "低端卡", "dict_value": 3, "dict_sort": 3}
+        {"id": 1, "dict_label": "高端卡", "dict_value": 1, "dict_sort": 1, "remark": "高性能GPU卡"},
+        {"id": 2, "dict_label": "中端卡", "dict_value": 2, "dict_sort": 2, "remark": "中等性能GPU卡"},
+        {"id": 3, "dict_label": "低端卡", "dict_value": 3, "dict_sort": 3, "remark": "入门级GPU卡"}
     ]
 
     for d in tier_dicts:
-        existing = db.query(LocalGpuTierDict).filter(
-            LocalGpuTierDict.dict_type == 'gpu_tier',
-            LocalGpuTierDict.dict_value == d["dict_value"]
-        ).first()
-        if not existing:
-            tier_dict = LocalGpuTierDict(
-                id=d["id"],
-                dict_type='gpu_tier',
-                dict_label=d["dict_label"],
-                dict_value=d["dict_value"],
-                dict_sort=d["dict_sort"],
-                status=1,
-                remark=f'GPU档次-{d["dict_label"]}',
-                deleted=0
-            )
-            db.add(tier_dict)
+        tier_dict = LocalGpuTierDict(
+            id=d["id"],
+            dict_type='gpu_tier',
+            dict_label=d["dict_label"],
+            dict_value=d["dict_value"],
+            dict_sort=d["dict_sort"],
+            status=1,
+            remark=d["remark"],
+            deleted=0
+        )
+        db.add(tier_dict)
 
     db.commit()
     print("本地GPU档次字典初始化完成")
